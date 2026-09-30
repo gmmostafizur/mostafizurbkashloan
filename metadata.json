@@ -1,0 +1,6 @@
+{
+  "name": "Mostafizur bKash Loan Management Software",
+  "description": "Smart loan tracking, dynamic EMI payment recalculation, monthly rollover, and ledger reports for bKash micro-loans.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
