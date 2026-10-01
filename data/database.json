@@ -1,0 +1,78 @@
+{
+  "users": {
+    "01700000000": {
+      "id": "usr_01700000000",
+      "phone": "01700000000",
+      "name": "মোস্তাফিজুর রহমান (Mostafizur Rahman)",
+      "darkMode": false,
+      "avatarUrl": "",
+      "createdAt": "2026-10-01T11:50:31.652Z",
+      "updatedAt": "2026-10-01T11:50:31.653Z"
+    },
+    "01712345678": {
+      "id": "usr_01712345678_1790855439416",
+      "phone": "01712345678",
+      "name": "আরিফুল ইসলাম চৌধুরী",
+      "darkMode": true,
+      "avatarUrl": "",
+      "createdAt": "2026-10-01T11:50:39.416Z",
+      "updatedAt": "2026-10-01T11:50:45.257Z"
+    },
+    "01907239952": {
+      "id": "usr_01907239952",
+      "phone": "01907239952",
+      "name": "Mostafizur Rahman",
+      "password": "Allah2552",
+      "role": "user",
+      "darkMode": false,
+      "avatarUrl": "",
+      "createdAt": "2026-10-01T11:58:09.740Z",
+      "updatedAt": "2026-10-01T11:58:13.044Z",
+      "lastLoginAt": "2026-10-01T11:58:13.044Z"
+    },
+    "01613572749": {
+      "id": "usr_admin_01613572749",
+      "phone": "01613572749",
+      "name": "Admin",
+      "password": "Gmmostafizur331@",
+      "role": "admin",
+      "darkMode": false,
+      "avatarUrl": "",
+      "createdAt": "2026-10-01T11:58:09.740Z",
+      "updatedAt": "2026-10-01T11:58:21.787Z",
+      "lastLoginAt": "2026-10-01T11:58:21.787Z"
+    }
+  },
+  "activityLogs": [
+    {
+      "id": "log_1790855901787_1121",
+      "userId": "usr_admin_01613572749",
+      "userName": "Admin",
+      "userPhone": "01613572749",
+      "action": "LOGIN",
+      "description": "Admin (01613572749) সিস্টেমে সফলভাবে লগইন করেছেন",
+      "timestamp": "2026-10-01T11:58:21.787Z",
+      "device": "curl/7.88.1"
+    },
+    {
+      "id": "log_1790855893044_4j7e",
+      "userId": "usr_01907239952",
+      "userName": "Mostafizur Rahman",
+      "userPhone": "01907239952",
+      "action": "LOGIN",
+      "description": "Mostafizur Rahman (01907239952) সিস্টেমে সফলভাবে লগইন করেছেন",
+      "timestamp": "2026-10-01T11:58:13.044Z",
+      "device": "curl/7.88.1"
+    },
+    {
+      "id": "log_init_1790855889740",
+      "userId": "usr_01907239952",
+      "userName": "Mostafizur Rahman",
+      "userPhone": "01907239952",
+      "action": "SYSTEM_SETUP",
+      "description": "সিস্টেমে মোস্তাফিজুর রহমান ও অ্যাডমিন অ্যাকাউন্ট সক্রিয় করা হয়েছে",
+      "timestamp": "2026-10-01T11:58:09.740Z",
+      "device": "System Server"
+    }
+  ]
+}

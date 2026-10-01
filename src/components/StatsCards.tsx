@@ -116,7 +116,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
             className="text-lg font-semibold text-amber-600 font-mono-numbers hover:underline cursor-pointer"
             title="Click to view due soon"
           >
-            {dueSoonLoans.length} {lang === 'bn' ? 'আগামী মাসের কিস্তি' : 'upcoming'}
+            {dueSoonLoans.length} {lang === 'bn' ? 'আসন্ন কিস্তি' : 'due soon'}
           </button>
         </div>
         <div className="mt-2 text-xs text-slate-500 flex items-center justify-between">

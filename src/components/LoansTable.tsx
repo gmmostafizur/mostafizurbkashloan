@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { LoanRecord, Language } from '../types/loan';
 import { getT } from '../utils/translations';
-import { formatCurrency, isDateOverdue, getDaysRemaining, toBanglaNumber } from '../utils/dateUtils';
+import { formatCurrency, isDateOverdue, getDaysRemaining, toBanglaNumber, getLoanMonthStatusInfo } from '../utils/dateUtils';
 import { exportLoansToCSV, exportLoansToPDF } from '../utils/exportUtils';
 import { RepaymentProgressBar } from './RepaymentProgressBar';
 import {
@@ -744,25 +744,46 @@ export const LoansTable: React.FC<LoansTableProps> = ({
 
                     {/* Status */}
                     <td className="py-3 px-3 whitespace-nowrap">
-                      {isSettled ? (
-                        <span className="text-emerald-700 font-medium flex items-center gap-1">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          {t.statusPaid}
-                        </span>
-                      ) : isOverdue ? (
-                        <span className="text-rose-600 font-semibold flex items-center gap-1">
-                          <AlertTriangle className="w-3.5 h-3.5" />
-                          {t.statusOverdue}
-                        </span>
-                      ) : daysRemaining <= 14 ? (
-                        <span className="text-amber-600 font-medium">
-                          {t.statusDueSoon}
-                        </span>
-                      ) : (
-                        <span className="text-slate-600 font-medium">
-                          {t.statusActive}
-                        </span>
-                      )}
+                      {(() => {
+                        const monthInfo = getLoanMonthStatusInfo(loan.nextLoanSubmitDate);
+                        if (isSettled) {
+                          return (
+                            <span className="text-emerald-700 font-medium flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              {t.statusPaid}
+                            </span>
+                          );
+                        }
+                        if (isOverdue) {
+                          return (
+                            <span className="text-rose-600 font-semibold flex items-center gap-1">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              {t.statusOverdue}
+                            </span>
+                          );
+                        }
+                        if (monthInfo.isCurrentMonth) {
+                          return (
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium ${
+                              daysRemaining <= 7 ? 'bg-pink-100 text-[#E2136E] border border-pink-200' : 'bg-pink-50 text-pink-700'
+                            }`}>
+                              {lang === 'bn' ? monthInfo.badgeLabelBn : monthInfo.badgeLabelEn}
+                            </span>
+                          );
+                        }
+                        if (monthInfo.isNextMonth) {
+                          return (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                              {lang === 'bn' ? monthInfo.badgeLabelBn : monthInfo.badgeLabelEn}
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="text-slate-600 font-medium">
+                            {lang === 'bn' ? monthInfo.badgeLabelBn : monthInfo.badgeLabelEn}
+                          </span>
+                        );
+                      })()}
                     </td>
 
                     {/* Actions */}

@@ -47,10 +47,45 @@ export const QuickCommandBar: React.FC<QuickCommandBarProps> = ({
 }) => {
   const t = getT(lang);
   const [input, setInput] = useState('');
+  const [isDropdownDismissed, setIsDropdownDismissed] = useState(false);
   const [feedback, setFeedback] = useState<{
     text: string;
     type: 'success' | 'info' | 'warning';
   } | null>(null);
+
+  // Fast live search results computation
+  const banglaBorrowerMap: Record<string, string> = {
+    'মুশা': 'Musha',
+    'মুসা': 'Musha',
+    'সোহেল অপু': 'Sohel Apu',
+    'সোহেল': 'Sohel Apu',
+    'হারুন': 'Harun',
+    'মোস্তাফিজুর': 'Mostafizur',
+    'মুস্তাফিজুর': 'Mostafizur',
+  };
+
+  const liveSearchResults = useMemo(() => {
+    const q = input.trim().toLowerCase();
+    if (!q || q.length < 1 || isDropdownDismissed) return [];
+
+    let translatedQuery = q;
+    for (const [bn, en] of Object.entries(banglaBorrowerMap)) {
+      if (q.includes(bn.toLowerCase())) {
+        translatedQuery = en.toLowerCase();
+        break;
+      }
+    }
+
+    return loans.filter(l => {
+      const name = l.personName.toLowerCase();
+      const id = l.loanId.toLowerCase();
+      return (
+        name.includes(q) ||
+        name.includes(translatedQuery) ||
+        id.includes(q)
+      );
+    });
+  }, [input, loans, isDropdownDismissed]);
 
   // Attachment & OCR state
   const [attachedImage, setAttachedImage] = useState<File | null>(null);
@@ -300,18 +335,35 @@ export const QuickCommandBar: React.FC<QuickCommandBarProps> = ({
             value={input}
             onChange={(e) => {
               setInput(e.target.value);
+              setIsDropdownDismissed(false);
               if (feedback) setFeedback(null);
             }}
             placeholder={
               lang === 'bn'
-                ? 'কমান্ড লিখুন অথবা বিকাশ স্ক্রিনশট/ছবি সংযুক্ত করুন (Ctrl+V বা ড্র্যাগ করুন)...'
-                : 'Type command or attach bKash screenshot/photo (Ctrl+V or drag & drop)...'
+                ? 'নাম (যেমন: হারুন, মুশা), লোন আইডি বা কমান্ড লিখুন...'
+                : 'Type borrower name, Loan ID, or command...'
             }
-            className="w-full pl-10 pr-32 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#E2136E] focus:border-[#E2136E] transition-all text-slate-900 placeholder:text-slate-400"
+            className="w-full pl-10 pr-36 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#E2136E] focus:border-[#E2136E] transition-all text-slate-900 placeholder:text-slate-400"
           />
 
-          {/* Right Action Icons in Input: Attachment & Submit */}
-          <div className="absolute inset-y-0 right-1.5 flex items-center gap-1.5">
+          {/* Right Action Icons in Input: Clear, Attachment & Submit */}
+          <div className="absolute inset-y-0 right-1.5 flex items-center gap-1">
+            {/* Clear Input Button */}
+            {input.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setInput('');
+                  setIsDropdownDismissed(true);
+                  if (feedback) setFeedback(null);
+                }}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-md transition-colors"
+                title={lang === 'bn' ? 'মুছে ফেলুন' : 'Clear search'}
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+
             {/* Attachment Button */}
             <button
               type="button"
@@ -321,21 +373,150 @@ export const QuickCommandBar: React.FC<QuickCommandBarProps> = ({
             >
               <Camera className="w-3.5 h-3.5 text-[#E2136E]" />
               <span className="hidden sm:inline text-[11px] font-medium">
-                {lang === 'bn' ? 'ছবি / স্ক্রিনশট' : 'Attach Image'}
+                {lang === 'bn' ? 'ছবি' : 'Image'}
               </span>
             </button>
 
             {/* Run Button */}
             <button
               type="submit"
-              className="flex items-center gap-1 px-3 py-1 text-xs font-semibold text-white bg-[#E2136E] hover:bg-[#c40e5d] rounded transition-colors shadow-2xs"
+              className="flex items-center gap-1 px-3 py-1 text-xs font-semibold text-white bg-[#E2136E] hover:bg-[#c40e5d] rounded transition-colors shadow-2xs cursor-pointer"
             >
-              <span>{lang === 'bn' ? 'প্রয়োগ' : 'Run'}</span>
+              <span>{lang === 'bn' ? 'সার্চ' : 'Search'}</span>
               <CornerDownLeft className="w-3 h-3" />
             </button>
           </div>
         </div>
       </form>
+
+      {/* FAST LIVE SEARCH RESULTS DROPDOWN (নাম সার্চ করলে তাৎক্ষণিক দেখাবে) */}
+      {liveSearchResults.length > 0 && !isDropdownDismissed && (
+        <div className="mt-2 bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden z-30 animate-in fade-in slide-in-from-top-1 duration-150">
+          <div className="px-3 py-2 bg-slate-900 text-white flex items-center justify-between text-xs">
+            <span className="font-semibold flex items-center gap-1.5">
+              <Search className="w-3.5 h-3.5 text-pink-400" />
+              <span>
+                {lang === 'bn'
+                  ? `দ্রুত সার্চ ফলাফল (${liveSearchResults.length}টি লোন পাওয়া গেছে)`
+                  : `Instant Results (${liveSearchResults.length} loans found)`}
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsDropdownDismissed(true)}
+              className="text-slate-400 hover:text-white p-0.5 rounded cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
+            {liveSearchResults.map((loan) => {
+              const isOver = isDateOverdue(loan.nextLoanSubmitDate);
+              const days = getDaysRemaining(loan.nextLoanSubmitDate);
+              const isSettled = loan.totalDue <= 0 || loan.status === 'paid';
+
+              return (
+                <div
+                  key={loan.id}
+                  className="p-3 hover:bg-slate-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                >
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                      {loan.personName.charAt(0)}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-xs text-slate-900 truncate">
+                          {loan.personName}
+                        </span>
+                        <span className="text-[10px] font-mono-numbers text-slate-500">
+                          {loan.loanId}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600 mt-0.5">
+                        <span>
+                          {lang === 'bn' ? 'চলতি কিস্তি:' : 'Current EMI:'}{' '}
+                          <strong className="text-slate-900 font-mono-numbers">
+                            {formatCurrency(loan.currentMonthEmi, lang)}
+                          </strong>
+                        </span>
+                        <span>•</span>
+                        <span>
+                          {lang === 'bn' ? 'মোট বকেয়া:' : 'Total Due:'}{' '}
+                          <strong className="text-[#E2136E] font-mono-numbers">
+                            {formatCurrency(loan.totalDue, lang)}
+                          </strong>
+                        </span>
+                        <span>•</span>
+                        <span className="font-mono-numbers">
+                          {loan.nextLoanSubmitDate}{' '}
+                          {isSettled ? (
+                            <span className="text-emerald-600 font-medium">({lang === 'bn' ? 'পরিশোধিত' : 'Paid'})</span>
+                          ) : isOver ? (
+                            <span className="text-rose-600 font-semibold">({lang === 'bn' ? 'মেয়াদোত্তীর্ণ' : 'Overdue'})</span>
+                          ) : days <= 7 ? (
+                            <span className="text-amber-600 font-medium">({days} {lang === 'bn' ? 'দিন বাকি' : 'days left'})</span>
+                          ) : (
+                            <span className="text-slate-500">({days} {lang === 'bn' ? 'দিন বাকি' : 'days'})</span>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Fast Action Buttons */}
+                  <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
+                    {!isSettled && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsDropdownDismissed(true);
+                          onExecuteCommand({
+                            action: 'PAYMENT',
+                            payload: {
+                              targetLoan: loan,
+                              personName: loan.personName,
+                              amount: loan.currentMonthEmi,
+                            },
+                            explanationEn: `Payment for ${loan.personName}`,
+                            explanationBn: `${loan.personName}-এর কিস্তি পরিশোধ`,
+                            confidence: 1,
+                          });
+                        }}
+                        className="px-2.5 py-1 text-[11px] font-semibold text-white bg-[#E2136E] hover:bg-[#c40e5d] rounded shadow-2xs flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        <CreditCard className="w-3 h-3" />
+                        <span>{lang === 'bn' ? 'কিস্তি জমা' : 'Pay EMI'}</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsDropdownDismissed(true);
+                        onExecuteCommand({
+                          action: 'SEARCH_BORROWER',
+                          payload: {
+                            personName: loan.personName,
+                            filterQuery: loan.personName,
+                          },
+                          explanationEn: `Viewing all loans for ${loan.personName}`,
+                          explanationBn: `${loan.personName}-এর সকল লোন দেখানো হচ্ছে`,
+                          confidence: 1,
+                        });
+                      }}
+                      className="px-2.5 py-1 text-[11px] font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <User className="w-3 h-3 text-slate-500" />
+                      <span>{lang === 'bn' ? 'সকল লোন' : 'View Profile'}</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ATTACHED SCREENSHOT PREVIEW & OCR PROGRESS CARD */}
       {attachedImage && (

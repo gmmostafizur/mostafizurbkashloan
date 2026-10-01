@@ -21,7 +21,13 @@ import { TransactionLedger } from './components/TransactionLedger';
 import { MonthlyReport } from './components/MonthlyReport';
 import { MonthlyRolloverModal } from './components/MonthlyRolloverModal';
 import { AILoanAdvisor } from './components/AILoanAdvisor';
+import { AdminDashboard } from './components/AdminDashboard';
+import { UserProfileView } from './components/UserProfileView';
 import { MobileBottomNav } from './components/MobileBottomNav';
+import { LandingPage } from './components/LandingPage';
+import { AuthModal } from './components/AuthModal';
+import { SettingsModal } from './components/SettingsModal';
+import { UserProfile } from './types/user';
 import { ParsedCommandResult } from './utils/nlpParser';
 import { parseScreenshotText, ParsedScreenshotData } from './utils/screenshotParser';
 import { bumpDateByOneMonth, formatCurrency, isDateOverdue } from './utils/dateUtils';
@@ -32,6 +38,9 @@ import { CheckCircle2, RotateCcw, AlertTriangle, ShieldCheck, Sparkles } from 'l
 const STORAGE_KEY_LOANS = 'mostafizur_bkash_loans_v2';
 const STORAGE_KEY_TRANSACTIONS = 'mostafizur_bkash_tx_v2';
 const STORAGE_KEY_LANG = 'mostafizur_bkash_lang_v2';
+const STORAGE_KEY_USER = 'mostafizur_bkash_user_v2';
+const STORAGE_KEY_DARK = 'mostafizur_bkash_dark_v2';
+const STORAGE_KEY_VIEW = 'mostafizur_bkash_view_v2';
 
 export default function App() {
   // Load state from localStorage or seed
@@ -65,8 +74,41 @@ export default function App() {
     return 'bn';
   });
 
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'borrowers' | 'loans' | 'ledger' | 'report' | 'ai'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'borrowers' | 'loans' | 'ledger' | 'report' | 'ai' | 'admin' | 'profile'>('dashboard');
   const [selectedBorrower, setSelectedBorrower] = useState<string | null>(null);
+
+  // User & Authentication state
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_USER);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return null;
+  });
+
+  const [showLandingPage, setShowLandingPage] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_VIEW);
+      if (saved === 'dashboard') return false;
+      if (saved === 'landing') return true;
+    } catch (e) {}
+    // If not logged in, show landing page first!
+    return true;
+  });
+
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_DARK);
+      if (saved !== null) return JSON.parse(saved);
+    } catch (e) {}
+    return false;
+  });
+
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   // Modals state
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -113,9 +155,65 @@ export default function App() {
     }
   }, [lang]);
 
+  useEffect(() => {
+    try {
+      if (currentUser) {
+        localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem(STORAGE_KEY_USER);
+      }
+    } catch (e) {}
+  }, [currentUser]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_DARK, JSON.stringify(darkMode));
+      if (darkMode) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    } catch (e) {}
+  }, [darkMode]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_VIEW, showLandingPage ? 'landing' : 'dashboard');
+    } catch (e) {}
+  }, [showLandingPage]);
+
+  // Sync loans to persistent server database whenever updated
+  useEffect(() => {
+    if (currentUser?.phone) {
+      fetch('/api/user/sync-loans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: currentUser.phone,
+          loans,
+          transactions,
+        }),
+      }).catch(err => console.warn('Database sync:', err));
+    }
+  }, [loans, transactions, currentUser?.phone]);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  // Record user action to backend activity log
+  const recordActivity = (action: string, description: string, metadata?: any) => {
+    fetch('/api/activity/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phone: currentUser?.phone || '01907239952',
+        action,
+        description,
+        metadata,
+      }),
+    }).catch(err => console.warn('Activity log error:', err));
   };
 
   // Reset database back to exact 12 initial loans
@@ -232,6 +330,12 @@ export default function App() {
     setReceiptTx(newTx);
     setReceiptLoan(updatedLoan);
     setIsReceiptModalOpen(true);
+
+    recordActivity('PAYMENT', `${oldLoan.personName}-এর বিকাশ লোনে ৳${amount.toFixed(2)} কিস্তি জমা হয়েছে (বকেয়া: ৳${newTotalDue})`, {
+      loanId,
+      amount,
+      borrower: oldLoan.personName,
+    });
   };
 
   // Open Payment Modal for specific loan
@@ -266,6 +370,11 @@ export default function App() {
       setLoans([loanRecord, ...loans]);
       showToast(lang === 'bn' ? 'নতুন লোন যুক্ত করা হয়েছে' : 'New loan record added successfully');
     }
+    recordActivity(
+      index >= 0 ? 'EDIT_LOAN' : 'NEW_LOAN',
+      `${loanRecord.personName}-এর বিকাশ লোন (${loanRecord.loanId}) ${index >= 0 ? 'সংশোধন' : 'নতুন যুক্ত'} করা হয়েছে`,
+      { loanId: loanRecord.loanId, person: loanRecord.personName }
+    );
     setLoanToEdit(null);
   };
 
@@ -317,6 +426,7 @@ export default function App() {
     });
 
     setLoans(updated);
+    recordActivity('ROLLOVER', 'মাসিক রোল-ওভার এবং কিস্তির শিডিউল নিরীক্ষা সফলভাবে সম্পন্ন হয়েছে');
     showToast(
       lang === 'bn'
         ? 'মাসিক রোল-ওভার সমাপ্ত হয়েছে। বকেয়া কিস্তিসমূহ সফলভাবে নিরীক্ষিত হয়েছে।'
@@ -368,14 +478,67 @@ export default function App() {
     }
   };
 
+  // User Authentication Handlers
+  const handleLoginSuccess = (user: UserProfile) => {
+    setCurrentUser(user);
+    if (user.darkMode !== undefined) setDarkMode(user.darkMode);
+    setShowLandingPage(false);
+    showToast(
+      lang === 'bn'
+        ? `স্বাগতম, ${user.name}! লগইন সফল হয়েছে।`
+        : `Welcome, ${user.name}! Logged in successfully.`
+    );
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setShowLandingPage(true);
+    showToast(lang === 'bn' ? 'লগআউট সম্পন্ন হয়েছে' : 'Logged out successfully');
+  };
+
+  if (showLandingPage) {
+    return (
+      <>
+        <LandingPage
+          lang={lang}
+          setLang={setLang}
+          currentUser={currentUser}
+          onOpenAuth={(mode) => {
+            setAuthModalMode(mode || 'login');
+            setIsAuthModalOpen(true);
+          }}
+          onEnterDashboard={() => setShowLandingPage(false)}
+          onLoginSuccess={handleLoginSuccess}
+          onLogout={handleLogout}
+        />
+
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          lang={lang}
+          initialMode={authModalMode}
+          onLoginSuccess={handleLoginSuccess}
+        />
+
+        {toastMessage && (
+          <div className="no-print fixed bottom-5 right-5 z-50 max-w-md bg-slate-900 text-white text-xs font-medium px-4 py-3 rounded-lg shadow-xl border border-slate-700 flex items-center gap-2.5 animate-in slide-in-from-bottom-3 duration-200">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{toastMessage}</span>
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors">
       {/* Top Navbar */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         lang={lang}
         setLang={setLang}
+        currentUser={currentUser}
         onOpenPaymentModal={() => {
           setPaymentTargetLoan(null);
           setPaymentInitialAmount(undefined);
@@ -390,6 +553,12 @@ export default function App() {
         onResetData={handleResetData}
         onExportCSV={() => exportLoansToCSV(loans, lang)}
         onExportPDF={() => exportLoansToPDF(loans, lang)}
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
+        onOpenAuth={() => {
+          setAuthModalMode('login');
+          setIsAuthModalOpen(true);
+        }}
+        onGoToLanding={() => setShowLandingPage(true)}
       />
 
       {/* Toast Notification */}
@@ -659,6 +828,42 @@ export default function App() {
             }}
           />
         )}
+
+        {/* Admin Control Center Tab (for Admin) */}
+        {activeTab === 'admin' && currentUser && (
+          <AdminDashboard
+            lang={lang}
+            currentUser={currentUser}
+            loans={loans}
+            transactions={transactions}
+            onSelectBorrower={(name) => {
+              setSelectedBorrower(name);
+              setActiveTab('borrowers');
+            }}
+            onPayLoan={(l) => handlePayLoan(l, false)}
+          />
+        )}
+
+        {/* User Profile View Tab */}
+        {activeTab === 'profile' && currentUser && (
+          <UserProfileView
+            lang={lang}
+            currentUser={currentUser}
+            onUpdateUser={(updated) => {
+              setCurrentUser(updated);
+              showToast(
+                lang === 'bn'
+                  ? 'প্রোফাইল তথ্য সফলভাবে আপডেট হয়েছে!'
+                  : 'Profile updated successfully!'
+              );
+            }}
+            onLogout={handleLogout}
+            darkMode={darkMode}
+            setDarkMode={setDarkMode}
+            loans={loans}
+            transactions={transactions}
+          />
+        )}
       </main>
 
       {/* Modals */}
@@ -697,6 +902,36 @@ export default function App() {
         onExecuteRollover={handleExecuteRollover}
       />
 
+      {/* User Settings Modal */}
+      {currentUser && (
+        <SettingsModal
+          isOpen={isSettingsModalOpen}
+          onClose={() => setIsSettingsModalOpen(false)}
+          lang={lang}
+          currentUser={currentUser}
+          onUpdateUser={(updated) => {
+            setCurrentUser(updated);
+            showToast(
+              lang === 'bn'
+                ? 'প্রোফাইল ও সেটিংস সফলভাবে আপডেট হয়েছে!'
+                : 'Profile & settings updated successfully!'
+            );
+          }}
+          onLogout={handleLogout}
+          darkMode={darkMode}
+          setDarkMode={setDarkMode}
+        />
+      )}
+
+      {/* Authentication Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        lang={lang}
+        initialMode={authModalMode}
+        onLoginSuccess={handleLoginSuccess}
+      />
+
       {/* Footer */}
       <footer className="no-print mt-auto border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500 mb-14 md:mb-0">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
@@ -724,6 +959,8 @@ export default function App() {
           setIsPaymentModalOpen(true);
         }}
         overdueCount={loans.filter(l => l.totalDue > 0 && isDateOverdue(l.nextLoanSubmitDate)).length}
+        isAdmin={currentUser?.role === 'admin' || currentUser?.phone === '01613572749'}
+        onOpenProfile={() => setActiveTab('profile')}
       />
     </div>
   );

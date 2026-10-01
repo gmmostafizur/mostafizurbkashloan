@@ -33,6 +33,7 @@ interface ChatMessage {
   sender: 'user' | 'ai';
   text: string;
   timestamp: string;
+  matchedLoans?: LoanRecord[];
 }
 
 export const AILoanAdvisor: React.FC<AILoanAdvisorProps> = ({
@@ -158,6 +159,59 @@ ${overdue.length > 0 ? `${overdue.length} accounts are currently overdue. Recomm
 
     setMessages(prev => [...prev, userMsg]);
     setUserInput('');
+
+    // Direct instant search for matching loans by name or ID
+    const qLower = q.toLowerCase();
+    const banglaBorrowerMap: Record<string, string> = {
+      'মুশা': 'Musha',
+      'মুসা': 'Musha',
+      'সোহেল অপু': 'Sohel Apu',
+      'সোহেল': 'Sohel Apu',
+      'হারুন': 'Harun',
+      'মোস্তাফিজুর': 'Mostafizur',
+      'মুস্তাফিজুর': 'Mostafizur',
+    };
+
+    let translatedQuery = qLower;
+    for (const [bn, en] of Object.entries(banglaBorrowerMap)) {
+      if (qLower.includes(bn.toLowerCase())) {
+        translatedQuery = en.toLowerCase();
+        break;
+      }
+    }
+
+    const matched = loans.filter(l => {
+      const name = l.personName.toLowerCase();
+      const id = l.loanId.toLowerCase();
+      return (
+        name.includes(qLower) ||
+        name.includes(translatedQuery) ||
+        id.includes(qLower) ||
+        (qLower.includes('overdue') && isDateOverdue(l.nextLoanSubmitDate) && l.totalDue > 0)
+      );
+    });
+
+    if (matched.length > 0) {
+      const totalDue = matched.reduce((s, l) => s + (l.status !== 'paid' ? l.totalDue : 0), 0);
+      const currentEmi = matched.reduce((s, l) => s + (l.status !== 'paid' ? l.currentMonthEmi : 0), 0);
+      const personNames = Array.from(new Set(matched.map(l => l.personName))).join(', ');
+
+      const responseText = lang === 'bn'
+        ? `🔍 "${q}" অনুসন্ধানে ${personNames}-এর মোট ${matched.length}টি লোন রেকর্ড পাওয়া গেছে।\n• সর্বমোট বকেয়া: ৳${totalDue.toLocaleString()}\n• চলতি মাসের প্রদেয় কিস্তি: ৳${currentEmi.toLocaleString()}\nনিচের কার্ড থেকে সরাসরি কিস্তি জমা অথবা তাগিদ এসএমএস ড্রাফট তৈরি করুন:`
+        : `🔍 Search for "${q}" found ${matched.length} loan accounts for ${personNames}.\n• Total Outstanding: ৳${totalDue.toFixed(2)}\n• Current Month EMI: ৳${currentEmi.toFixed(2)}\nUse the action buttons below to pay EMI or generate reminder SMS:`;
+
+      const instantAiMsg: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        sender: 'ai',
+        text: responseText,
+        matchedLoans: matched,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      setMessages(prev => [...prev, instantAiMsg]);
+      return;
+    }
+
     setIsSendingMessage(true);
 
     try {
@@ -413,15 +467,107 @@ ${overdue.length > 0 ? `${overdue.length} accounts are currently overdue. Recomm
                   </div>
                 )}
                 <div
-                  className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm shadow-2xs whitespace-pre-wrap leading-relaxed ${
+                  className={`max-w-[90%] sm:max-w-[80%] rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm shadow-2xs whitespace-pre-wrap leading-relaxed ${
                     msg.sender === 'user'
                       ? 'bg-slate-900 text-white rounded-tr-none'
                       : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'
                   }`}
                 >
                   <p>{msg.text}</p>
+
+                  {/* Render Matched Loans Cards */}
+                  {msg.matchedLoans && msg.matchedLoans.length > 0 && (
+                    <div className="mt-3 space-y-2 border-t border-slate-100 pt-2.5">
+                      {msg.matchedLoans.map(loan => {
+                        const isOver = isDateOverdue(loan.nextLoanSubmitDate);
+                        const days = getDaysRemaining(loan.nextLoanSubmitDate);
+                        const isSettled = loan.totalDue <= 0 || loan.status === 'paid';
+
+                        return (
+                          <div
+                            key={loan.id}
+                            className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex flex-col gap-2 hover:border-[#E2136E]/40 transition-colors"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-slate-900 text-xs">
+                                {loan.personName}
+                              </span>
+                              <span className="text-[10px] font-mono-numbers text-slate-500">
+                                {loan.loanId}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-[11px]">
+                              <div>
+                                <span className="text-slate-500 block text-[10px]">
+                                  {lang === 'bn' ? 'চলতি কিস্তি:' : 'Current EMI:'}
+                                </span>
+                                <span className="font-bold text-slate-900 font-mono-numbers">
+                                  {formatCurrency(loan.currentMonthEmi, lang)}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 block text-[10px]">
+                                  {lang === 'bn' ? 'মোট বকেয়া:' : 'Total Due:'}
+                                </span>
+                                <span className="font-bold text-[#E2136E] font-mono-numbers">
+                                  {formatCurrency(loan.totalDue, lang)}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between text-[10px] pt-1 border-t border-slate-200/60">
+                              <span className="font-mono-numbers text-slate-600">
+                                {lang === 'bn' ? 'তারিখ:' : 'Due:'} {loan.nextLoanSubmitDate}{' '}
+                                {isSettled ? (
+                                  <span className="text-emerald-600 font-semibold">(পরিশোধিত)</span>
+                                ) : isOver ? (
+                                  <span className="text-rose-600 font-bold">(মেয়াদোত্তীর্ণ)</span>
+                                ) : (
+                                  <span className="text-amber-600 font-medium">({days} দিন বাকি)</span>
+                                )}
+                              </span>
+
+                              {/* Interactive Actions */}
+                              <div className="flex items-center gap-1">
+                                {!isSettled && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onPayLoan(loan)}
+                                    className="px-2 py-0.5 bg-[#E2136E] hover:bg-[#c40e5d] text-white text-[10px] font-semibold rounded shadow-2xs cursor-pointer flex items-center gap-0.5"
+                                  >
+                                    <span>{lang === 'bn' ? 'কিস্তি জমা' : 'Pay'}</span>
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedLoanId(loan.loanId);
+                                    setSubTab('sms');
+                                    handleGenerateSms();
+                                  }}
+                                  className="px-2 py-0.5 bg-purple-100 hover:bg-purple-200 text-purple-900 text-[10px] font-medium rounded cursor-pointer"
+                                  title="Generate SMS"
+                                >
+                                  <span>{lang === 'bn' ? 'তাগিদ SMS' : 'SMS'}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => onSelectBorrower(loan.personName)}
+                                  className="px-2 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-800 text-[10px] font-medium rounded cursor-pointer"
+                                >
+                                  <span>{lang === 'bn' ? 'খতিয়ানে দেখুন' : 'View'}</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   <span
-                    className={`block text-[10px] mt-1 text-right ${
+                    className={`block text-[10px] mt-1.5 text-right ${
                       msg.sender === 'user' ? 'text-slate-400' : 'text-slate-400'
                     }`}
                   >

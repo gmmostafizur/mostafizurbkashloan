@@ -139,10 +139,9 @@ export function parseNaturalLanguageCommand(
 
   // Detect Borrower Name in input
   let detectedBorrower: string | undefined;
-  for (const b of knownBorrowers) {
-    if (lower.includes(b)) {
-      const match = loans.find(l => l.personName.toLowerCase() === b);
-      detectedBorrower = match ? match.personName : b;
+  for (const bName of distinctBorrowers) {
+    if (lower.includes(bName.toLowerCase())) {
+      detectedBorrower = bName;
       break;
     }
   }

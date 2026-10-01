@@ -144,8 +144,8 @@ export const translations = {
     colActions: 'কার্যক্রম',
     
     // Statuses
-    statusActive: 'বর্তমান মাস',
-    statusDueSoon: 'আগামী মাসের কিস্তি',
+    statusActive: 'এই মাসের কিস্তি',
+    statusDueSoon: 'আসন্ন কিস্তি',
     statusOverdue: 'মেয়াদোত্তীর্ণ',
     statusPaid: 'পরিশোধিত',
     
@@ -153,9 +153,9 @@ export const translations = {
     searchPlaceholder: 'নাম অথবা লোন আইডি দিয়ে খুঁজুন...',
     allBorrowers: 'সকল ঋণগ্রহীতা',
     filterAll: 'সকল লোন',
-    filterActive: 'বর্তমান মাস',
+    filterActive: 'এই মাসের কিস্তি',
     filterOverdue: 'মেয়াদোত্তীর্ণ',
-    filterDueSoon: 'আগামী মাসের কিস্তি',
+    filterDueSoon: 'আসন্ন কিস্তি',
     filterSettled: 'সম্পূর্ণ পরিশোধিত',
     
     // Borrower breakdown

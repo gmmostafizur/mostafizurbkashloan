@@ -7,15 +7,18 @@ import {
   Sparkles,
   CreditCard,
   PlusCircle,
+  User,
 } from 'lucide-react';
 import { Language } from '../types/loan';
 
 interface MobileBottomNavProps {
-  activeTab: 'dashboard' | 'borrowers' | 'loans' | 'ledger' | 'report' | 'ai';
-  setActiveTab: (tab: 'dashboard' | 'borrowers' | 'loans' | 'ledger' | 'report' | 'ai') => void;
+  activeTab: 'dashboard' | 'borrowers' | 'loans' | 'ledger' | 'report' | 'ai' | 'admin' | 'profile';
+  setActiveTab: (tab: 'dashboard' | 'borrowers' | 'loans' | 'ledger' | 'report' | 'ai' | 'admin' | 'profile') => void;
   lang: Language;
   onOpenPaymentModal: () => void;
   overdueCount?: number;
+  isAdmin?: boolean;
+  onOpenProfile?: () => void;
 }
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
@@ -24,6 +27,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   lang,
   onOpenPaymentModal,
   overdueCount = 0,
+  isAdmin = false,
+  onOpenProfile,
 }) => {
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-1 py-1.5 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] safe-area-bottom">
@@ -108,6 +113,43 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           </div>
           <span className="text-[10px] mt-0.5 tracking-tight">
             {lang === 'bn' ? 'AI উপদেষ্টা' : 'AI Copilot'}
+          </span>
+        </button>
+
+        {/* Admin Tab (if admin) */}
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('admin')}
+            className={`flex flex-col items-center justify-center py-1 px-1.5 rounded-lg transition-colors min-w-[48px] min-h-[48px] relative cursor-pointer ${
+              activeTab === 'admin'
+                ? 'text-purple-900 font-bold'
+                : 'text-purple-600 hover:text-purple-900'
+            }`}
+          >
+            <span className="text-base leading-none">👑</span>
+            <span className="text-[10px] mt-0.5 tracking-tight font-semibold">
+              {lang === 'bn' ? 'অ্যাডমিন' : 'Admin'}
+            </span>
+          </button>
+        )}
+
+        {/* User Profile Tab */}
+        <button
+          type="button"
+          onClick={() => {
+            if (onOpenProfile) onOpenProfile();
+            else setActiveTab('profile');
+          }}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg transition-colors min-w-[50px] min-h-[48px] cursor-pointer ${
+            activeTab === 'profile'
+              ? 'text-[#E2136E] font-bold'
+              : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <User className={`w-5 h-5 ${activeTab === 'profile' ? 'stroke-[2.5]' : 'stroke-[1.8]'}`} />
+          <span className="text-[10px] mt-0.5 tracking-tight font-semibold">
+            {lang === 'bn' ? 'প্রোফাইল' : 'Profile'}
           </span>
         </button>
       </div>

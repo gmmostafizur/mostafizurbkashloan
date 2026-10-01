@@ -4,6 +4,7 @@ import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 dotenv.config();
 
@@ -13,7 +14,356 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = 3000;
 
-app.use(express.json({ limit: '15mb' }));
+app.use(express.json({ limit: '20mb' }));
+
+// Database directory & persistent file initialization
+const DATA_DIR = path.resolve(__dirname, 'data');
+const DB_FILE = path.resolve(DATA_DIR, 'database.json');
+
+function initDatabase() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    let db: any = { users: {}, activityLogs: [] };
+    if (fs.existsSync(DB_FILE)) {
+      try {
+        db = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
+      } catch (e) {
+        db = { users: {}, activityLogs: [] };
+      }
+    }
+    if (!db.users) db.users = {};
+    if (!db.activityLogs) db.activityLogs = [];
+
+    // 1. Personal User for Mostafizur Rahman: 01907239952 / Allah2552
+    const personalPhone = '01907239952';
+    if (!db.users[personalPhone]) {
+      db.users[personalPhone] = {
+        id: `usr_${personalPhone}`,
+        phone: personalPhone,
+        name: 'Mostafizur Rahman',
+        password: 'Allah2552',
+        role: 'user',
+        darkMode: false,
+        avatarUrl: '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString(),
+      };
+    } else {
+      db.users[personalPhone].name = 'Mostafizur Rahman';
+      db.users[personalPhone].password = 'Allah2552';
+      db.users[personalPhone].role = 'user';
+    }
+
+    // 2. Admin User: 01613572749 / Gmmostafizur331@
+    const adminPhone = '01613572749';
+    if (!db.users[adminPhone]) {
+      db.users[adminPhone] = {
+        id: `usr_admin_${adminPhone}`,
+        phone: adminPhone,
+        name: 'Admin',
+        password: 'Gmmostafizur331@',
+        role: 'admin',
+        darkMode: false,
+        avatarUrl: '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString(),
+      };
+    } else {
+      db.users[adminPhone].name = 'Admin';
+      db.users[adminPhone].password = 'Gmmostafizur331@';
+      db.users[adminPhone].role = 'admin';
+    }
+
+    // Initial demo log if empty
+    if (db.activityLogs.length === 0) {
+      db.activityLogs.push({
+        id: `log_init_${Date.now()}`,
+        userId: `usr_${personalPhone}`,
+        userName: 'Mostafizur Rahman',
+        userPhone: personalPhone,
+        action: 'SYSTEM_SETUP',
+        description: 'সিস্টেমে মোস্তাফিজুর রহমান ও অ্যাডমিন অ্যাকাউন্ট সক্রিয় করা হয়েছে',
+        timestamp: new Date().toISOString(),
+        device: 'System Server',
+      });
+    }
+
+    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Database initialization error:', err);
+  }
+}
+
+initDatabase();
+
+function readDatabase(): any {
+  try {
+    if (!fs.existsSync(DB_FILE)) initDatabase();
+    const raw = fs.readFileSync(DB_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (!parsed.users) parsed.users = {};
+    if (!parsed.activityLogs) parsed.activityLogs = [];
+    return parsed;
+  } catch (err) {
+    console.error('Error reading database file:', err);
+    return { users: {}, activityLogs: [] };
+  }
+}
+
+function writeDatabase(data: any): boolean {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    return true;
+  } catch (err) {
+    console.error('Error writing database file:', err);
+    return false;
+  }
+}
+
+// ================= USER AUTH & DATABASE ROUTES =================
+
+// 1. Login or Register with Bangladeshi Phone Number, Password & Name
+app.post('/api/auth/login-or-register', (req, res) => {
+  try {
+    const { phone, name, password } = req.body;
+
+    if (!phone || typeof phone !== 'string') {
+      return res.status(400).json({ error: 'মোবাইল নম্বর দেওয়া বাধ্যতামূলক' });
+    }
+
+    // Clean phone number (strip whitespace, hyphens, and leading +88)
+    const cleanedPhone = phone.replace(/[\s\-\+]/g, '').replace(/^88/, '');
+
+    const db = readDatabase();
+    if (!db.users) db.users = {};
+    if (!db.activityLogs) db.activityLogs = [];
+
+    let user = db.users[cleanedPhone];
+    const isNew = !user;
+
+    if (isNew) {
+      user = {
+        id: `usr_${cleanedPhone}_${Date.now()}`,
+        phone: cleanedPhone,
+        name: (name && name.trim()) || 'ব্যবহারকারী',
+        password: (password && password.trim()) || '',
+        role: cleanedPhone === '01613572749' ? 'admin' : 'user',
+        darkMode: false,
+        avatarUrl: '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString(),
+      };
+      db.users[cleanedPhone] = user;
+    } else {
+      // User exists - check password if password was set
+      if (user.password) {
+        if (!password || password.trim() !== user.password.trim()) {
+          return res.status(401).json({
+            error: 'ভুল পাসওয়ার্ড! অনুগ্রহ করে সঠিক পাসওয়ার্ড দিন।'
+          });
+        }
+      } else if (password && password.trim()) {
+        user.password = password.trim();
+      }
+
+      // Update name if provided
+      if (name && name.trim() && name.trim() !== user.name) {
+        user.name = name.trim();
+      }
+      user.lastLoginAt = new Date().toISOString();
+      user.updatedAt = new Date().toISOString();
+      db.users[cleanedPhone] = user;
+    }
+
+    // Add activity log for login
+    const userAgent = (req.headers['user-agent'] || 'Web Browser').toString().slice(0, 80);
+    const newLog = {
+      id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      userId: user.id,
+      userName: user.name,
+      userPhone: user.phone,
+      action: 'LOGIN',
+      description: isNew
+        ? `${user.name} (${user.phone}) নতুন অ্যাকাউন্ট তৈরি করে সিস্টেমে প্রবেশ করেছেন`
+        : `${user.name} (${user.phone}) সিস্টেমে সফলভাবে লগইন করেছেন`,
+      timestamp: new Date().toISOString(),
+      device: userAgent,
+    };
+    db.activityLogs.unshift(newLog);
+    if (db.activityLogs.length > 300) db.activityLogs = db.activityLogs.slice(0, 300);
+
+    writeDatabase(db);
+
+    const { password: _p, ...safeUser } = user;
+    return res.json({
+      success: true,
+      isNew,
+      user: safeUser,
+    });
+  } catch (err: any) {
+    console.error('Auth error:', err);
+    res.status(500).json({ error: 'Authentication failed' });
+  }
+});
+
+// 2. Get User Profile by Phone
+app.get('/api/user/:phone', (req, res) => {
+  try {
+    const cleanedPhone = req.params.phone.replace(/[\s\-\+]/g, '').replace(/^88/, '');
+    const db = readDatabase();
+    const user = db.users?.[cleanedPhone];
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    return res.json({ success: true, user });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
+// 3. Update User Settings (Name, Phone, Dark Mode, Avatar/Logo)
+app.post('/api/user/settings', (req, res) => {
+  try {
+    const { phone, newPhone, name, darkMode, avatarUrl } = req.body;
+
+    if (!phone) {
+      return res.status(400).json({ error: 'Current phone is required' });
+    }
+
+    const currentPhone = phone.replace(/[\s\-\+]/g, '').replace(/^88/, '');
+    const db = readDatabase();
+
+    if (!db.users || !db.users[currentPhone]) {
+      return res.status(404).json({ error: 'User not found in database' });
+    }
+
+    const user = db.users[currentPhone];
+
+    if (name !== undefined) user.name = name.trim();
+    if (darkMode !== undefined) user.darkMode = Boolean(darkMode);
+    if (avatarUrl !== undefined) user.avatarUrl = avatarUrl;
+    user.updatedAt = new Date().toISOString();
+
+    // If user changed their phone number
+    if (newPhone && newPhone.trim()) {
+      const cleanedNewPhone = newPhone.replace(/[\s\-\+]/g, '').replace(/^88/, '');
+      if (cleanedNewPhone !== currentPhone) {
+        user.phone = cleanedNewPhone;
+        delete db.users[currentPhone];
+        db.users[cleanedNewPhone] = user;
+      }
+    }
+
+    writeDatabase(db);
+    return res.json({ success: true, user });
+  } catch (err: any) {
+    console.error('Settings update error:', err);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+// 4. Sync User Loan Data to Persistent Database
+app.post('/api/user/sync-loans', (req, res) => {
+  try {
+    const { phone, loans, transactions } = req.body;
+    if (!phone) return res.status(400).json({ error: 'Phone is required' });
+
+    const cleanedPhone = phone.replace(/[\s\-\+]/g, '').replace(/^88/, '');
+    const db = readDatabase();
+
+    if (!db.users || !db.users[cleanedPhone]) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    db.users[cleanedPhone].loans = loans;
+    db.users[cleanedPhone].transactions = transactions;
+    db.users[cleanedPhone].lastSyncAt = new Date().toISOString();
+
+    writeDatabase(db);
+    return res.json({ success: true, lastSyncAt: db.users[cleanedPhone].lastSyncAt });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to sync loans' });
+  }
+});
+
+// 5. Record User Action / Activity Log
+app.post('/api/activity/log', (req, res) => {
+  try {
+    const { phone, action, description, metadata } = req.body;
+    const db = readDatabase();
+    if (!db.activityLogs) db.activityLogs = [];
+
+    const cleanedPhone = phone ? phone.replace(/[\s\-\+]/g, '').replace(/^88/, '') : '';
+    const user = db.users?.[cleanedPhone];
+
+    const newLog = {
+      id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      userId: user?.id || (cleanedPhone ? `usr_${cleanedPhone}` : 'guest'),
+      userName: user?.name || (cleanedPhone ? `User (${cleanedPhone})` : 'সিস্টেম ইউজার'),
+      userPhone: cleanedPhone || 'Unknown',
+      action: action || 'ACTION',
+      description: description || 'কার্যক্রম সম্পন্ন হয়েছে',
+      timestamp: new Date().toISOString(),
+      device: (req.headers['user-agent'] || 'Web Browser').toString().slice(0, 80),
+      metadata,
+    };
+
+    db.activityLogs.unshift(newLog);
+    if (db.activityLogs.length > 300) db.activityLogs = db.activityLogs.slice(0, 300);
+    writeDatabase(db);
+
+    return res.json({ success: true, log: newLog });
+  } catch (err) {
+    console.error('Error logging activity:', err);
+    res.status(500).json({ error: 'Failed to record activity log' });
+  }
+});
+
+// 6. Get All Registered Users (For Admin Dashboard)
+app.get('/api/admin/users', (req, res) => {
+  try {
+    const db = readDatabase();
+    const usersList = Object.values(db.users || {}).map((u: any) => {
+      const { password, ...safe } = u;
+      return safe;
+    });
+    return res.json({ success: true, users: usersList });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+// 7. Get All Activity Logs (For Admin Audit View)
+app.get('/api/admin/activity-logs', (req, res) => {
+  try {
+    const db = readDatabase();
+    return res.json({ success: true, logs: db.activityLogs || [] });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch logs' });
+  }
+});
+
+// 8. Clear Activity Logs
+app.delete('/api/admin/activity-logs', (req, res) => {
+  try {
+    const db = readDatabase();
+    db.activityLogs = [];
+    writeDatabase(db);
+    return res.json({ success: true, message: 'Logs cleared successfully' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to clear logs' });
+  }
+});
 
 // Initialize Google GenAI with API key from environment
 let aiClient: GoogleGenAI | null = null;

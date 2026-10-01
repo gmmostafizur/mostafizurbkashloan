@@ -55,7 +55,7 @@ export function bumpDateByOneMonth(dateStr: string): string {
   return formatMMDDYYYY(nextDate);
 }
 
-export function getDaysRemaining(dateStr: string, referenceDate: Date = new Date(2026, 8, 30)): number {
+export function getDaysRemaining(dateStr: string, referenceDate: Date = new Date()): number {
   const target = parseMMDDYYYY(dateStr);
   if (!target) return 0;
 
@@ -67,8 +67,96 @@ export function getDaysRemaining(dateStr: string, referenceDate: Date = new Date
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
 
-export function isDateOverdue(dateStr: string, referenceDate: Date = new Date(2026, 8, 30)): boolean {
+export function isDateOverdue(dateStr: string, referenceDate: Date = new Date()): boolean {
   return getDaysRemaining(dateStr, referenceDate) < 0;
+}
+
+export interface LoanMonthStatusInfo {
+  isCurrentMonth: boolean;
+  isNextMonth: boolean;
+  isOverdue: boolean;
+  daysRemaining: number;
+  badgeLabelBn: string;
+  badgeLabelEn: string;
+  monthNameBn: string;
+  monthNameEn: string;
+}
+
+export function getLoanMonthStatusInfo(dateStr: string, referenceDate: Date = new Date()): LoanMonthStatusInfo {
+  const target = parseMMDDYYYY(dateStr);
+  const banglaMonthNames = [
+    'জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন',
+    'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'
+  ];
+  const englishMonthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  if (!target) {
+    return {
+      isCurrentMonth: true,
+      isNextMonth: false,
+      isOverdue: false,
+      daysRemaining: 0,
+      badgeLabelBn: 'এই মাসের কিস্তি',
+      badgeLabelEn: 'This Month EMI',
+      monthNameBn: 'বর্তমান মাস',
+      monthNameEn: 'Current Month',
+    };
+  }
+
+  const currentYear = referenceDate.getFullYear();
+  const currentMonth = referenceDate.getMonth();
+
+  const targetYear = target.getFullYear();
+  const targetMonth = target.getMonth();
+
+  const daysRemaining = getDaysRemaining(dateStr, referenceDate);
+  const isOverdue = daysRemaining < 0;
+
+  const monthDiff = (targetYear - currentYear) * 12 + (targetMonth - currentMonth);
+
+  const targetMonthNameBn = banglaMonthNames[targetMonth] || '';
+  const targetMonthNameEn = englishMonthNames[targetMonth] || '';
+
+  if (monthDiff <= 0) {
+    // Loan is in current month or past month
+    return {
+      isCurrentMonth: true,
+      isNextMonth: false,
+      isOverdue,
+      daysRemaining,
+      badgeLabelBn: isOverdue ? 'মেয়াদোত্তীর্ণ কিস্তি' : daysRemaining === 0 ? 'আজকে প্রদেয় কিস্তি' : `এই মাসের কিস্তি (${targetMonthNameBn})`,
+      badgeLabelEn: isOverdue ? 'Overdue' : daysRemaining === 0 ? 'Due Today' : `This Month (${targetMonthNameEn})`,
+      monthNameBn: `এই মাস (${targetMonthNameBn})`,
+      monthNameEn: `This Month (${targetMonthNameEn})`,
+    };
+  } else if (monthDiff === 1) {
+    // Loan is in next month
+    return {
+      isCurrentMonth: false,
+      isNextMonth: true,
+      isOverdue: false,
+      daysRemaining,
+      badgeLabelBn: `আগামী মাসের কিস্তি (${targetMonthNameBn})`,
+      badgeLabelEn: `Next Month (${targetMonthNameEn})`,
+      monthNameBn: `আগামী মাস (${targetMonthNameBn})`,
+      monthNameEn: `Next Month (${targetMonthNameEn})`,
+    };
+  } else {
+    // 2 or more months later
+    return {
+      isCurrentMonth: false,
+      isNextMonth: false,
+      isOverdue: false,
+      daysRemaining,
+      badgeLabelBn: `পরবর্তী কিস্তি (${targetMonthNameBn})`,
+      badgeLabelEn: `Future Installment (${targetMonthNameEn})`,
+      monthNameBn: targetMonthNameBn,
+      monthNameEn: targetMonthNameEn,
+    };
+  }
 }
 
 export function toBanglaNumber(val: number | string): string {
