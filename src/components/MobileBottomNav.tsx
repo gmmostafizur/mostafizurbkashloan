@@ -3,11 +3,9 @@ import {
   LayoutDashboard,
   Users,
   FileSpreadsheet,
-  Receipt,
-  Sparkles,
   CreditCard,
-  PlusCircle,
   User,
+  Sparkles,
 } from 'lucide-react';
 import { Language } from '../types/loan';
 
@@ -31,128 +29,137 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   onOpenProfile,
 }) => {
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-1 py-1.5 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] safe-area-bottom">
-      <div className="flex items-center justify-around max-w-lg mx-auto">
-        {/* Dashboard */}
+    <nav
+      aria-label="Mobile Navigation"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 shadow-[0_-8px_25px_rgba(0,0,0,0.08)] dark:shadow-[0_-8px_25px_rgba(0,0,0,0.4)] safe-area-bottom select-none"
+    >
+      <div className="relative max-w-md mx-auto px-2 py-1.5 flex items-center justify-between">
+        {/* 1. Home / Dashboard */}
         <button
           type="button"
           onClick={() => setActiveTab('dashboard')}
-          className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg transition-colors min-w-[56px] min-h-[48px] cursor-pointer ${
+          className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
             activeTab === 'dashboard'
               ? 'text-[#E2136E] font-bold'
-              : 'text-slate-500 hover:text-slate-800'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
           }`}
         >
-          <LayoutDashboard className={`w-5 h-5 ${activeTab === 'dashboard' ? 'stroke-[2.5]' : 'stroke-[1.8]'}`} />
-          <span className="text-[10px] mt-0.5 tracking-tight">
+          <div className="relative">
+            <LayoutDashboard className={`w-5 h-5 transition-transform duration-200 ${
+              activeTab === 'dashboard' ? 'scale-110 stroke-[2.4]' : 'stroke-[1.8]'
+            }`} />
+            {activeTab === 'dashboard' && (
+              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#E2136E] animate-pulse" />
+            )}
+          </div>
+          <span className="text-[10px] mt-1 font-medium tracking-tight">
             {lang === 'bn' ? 'হোম' : 'Home'}
           </span>
         </button>
 
-        {/* Borrowers */}
+        {/* 2. Borrowers (গ্রাহক) */}
         <button
           type="button"
           onClick={() => setActiveTab('borrowers')}
-          className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg transition-colors min-w-[56px] min-h-[48px] cursor-pointer ${
+          className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
             activeTab === 'borrowers'
               ? 'text-[#E2136E] font-bold'
-              : 'text-slate-500 hover:text-slate-800'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
           }`}
         >
-          <Users className={`w-5 h-5 ${activeTab === 'borrowers' ? 'stroke-[2.5]' : 'stroke-[1.8]'}`} />
-          <span className="text-[10px] mt-0.5 tracking-tight">
+          <div className="relative">
+            <Users className={`w-5 h-5 transition-transform duration-200 ${
+              activeTab === 'borrowers' ? 'scale-110 stroke-[2.4]' : 'stroke-[1.8]'
+            }`} />
+            {activeTab === 'borrowers' && (
+              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#E2136E] animate-pulse" />
+            )}
+          </div>
+          <span className="text-[10px] mt-1 font-medium tracking-tight">
             {lang === 'bn' ? 'গ্রাহক' : 'Borrowers'}
           </span>
         </button>
 
-        {/* Floating Fast Pay Center Button */}
-        <button
-          type="button"
-          onClick={onOpenPaymentModal}
-          className="flex flex-col items-center justify-center -mt-4 bg-[#E2136E] active:bg-[#c40e5d] text-white p-2.5 rounded-full shadow-lg border-2 border-white min-w-[48px] min-h-[48px] cursor-pointer transition-transform active:scale-95"
-          title="Record Payment"
-        >
-          <CreditCard className="w-5 h-5" />
-          <span className="sr-only">{lang === 'bn' ? 'কিস্তি জমা' : 'Pay'}</span>
-        </button>
+        {/* 3. MIDDLE: Elevated Floating Record Payment CTA with Animated Glow */}
+        <div className="flex-1 flex flex-col items-center justify-center -mt-6 relative z-10">
+          <button
+            type="button"
+            onClick={onOpenPaymentModal}
+            className="group relative flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-tr from-[#c40e5d] via-[#E2136E] to-pink-500 text-white shadow-[0_6px_20px_rgba(226,19,110,0.45)] border-4 border-white dark:border-slate-900 cursor-pointer transition-all duration-300 hover:scale-105 active:scale-90"
+            title={lang === 'bn' ? 'কিস্তি জমা দিন (Record Payment)' : 'Record Payment'}
+          >
+            {/* Pulsing ring animation */}
+            <span className="absolute inset-0 rounded-full bg-[#E2136E] opacity-40 animate-ping pointer-events-none -z-10" />
 
-        {/* Loans Table */}
+            {/* Glowing gradient background */}
+            <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-pink-600 to-[#E2136E] opacity-90 group-hover:opacity-100 transition-opacity" />
+
+            <div className="relative z-10 flex flex-col items-center justify-center">
+              <CreditCard className="w-6 h-6 text-white stroke-[2.2] transition-transform duration-300 group-hover:rotate-12 group-active:scale-95" />
+            </div>
+          </button>
+          <span className="text-[10px] mt-1 font-bold text-[#E2136E] tracking-tight">
+            {lang === 'bn' ? 'কিস্তি জমা' : 'Pay'}
+          </span>
+        </div>
+
+        {/* 4. Loans Ledger (লোন খতিয়ান) */}
         <button
           type="button"
           onClick={() => setActiveTab('loans')}
-          className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg transition-colors min-w-[56px] min-h-[48px] relative cursor-pointer ${
+          className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
             activeTab === 'loans'
               ? 'text-[#E2136E] font-bold'
-              : 'text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <FileSpreadsheet className={`w-5 h-5 ${activeTab === 'loans' ? 'stroke-[2.5]' : 'stroke-[1.8]'}`} />
-          <span className="text-[10px] mt-0.5 tracking-tight">
-            {lang === 'bn' ? 'লোন খতিয়ান' : 'Loans'}
-          </span>
-          {overdueCount > 0 && (
-            <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-          )}
-        </button>
-
-        {/* AI Copilot Tab */}
-        <button
-          type="button"
-          onClick={() => setActiveTab('ai')}
-          className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg transition-colors min-w-[56px] min-h-[48px] relative cursor-pointer ${
-            activeTab === 'ai'
-              ? 'text-purple-700 font-bold'
-              : 'text-slate-500 hover:text-slate-800'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
           }`}
         >
           <div className="relative">
-            <Sparkles className={`w-5 h-5 ${activeTab === 'ai' ? 'text-purple-600 stroke-[2.5]' : 'text-slate-500 stroke-[1.8]'}`} />
-            <span className="absolute -top-1 -right-2 text-[8px] bg-gradient-to-r from-pink-500 to-purple-600 text-white font-extrabold px-1 rounded-full">
-              AI
-            </span>
+            <FileSpreadsheet className={`w-5 h-5 transition-transform duration-200 ${
+              activeTab === 'loans' ? 'scale-110 stroke-[2.4]' : 'stroke-[1.8]'
+            }`} />
+            {overdueCount > 0 && (
+              <span className="absolute -top-1 -right-2 w-2.5 h-2.5 bg-rose-500 border-2 border-white dark:border-slate-900 rounded-full animate-bounce" />
+            )}
+            {activeTab === 'loans' && (
+              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#E2136E] animate-pulse" />
+            )}
           </div>
-          <span className="text-[10px] mt-0.5 tracking-tight">
-            {lang === 'bn' ? 'AI উপদেষ্টা' : 'AI Copilot'}
+          <span className="text-[10px] mt-1 font-medium tracking-tight">
+            {lang === 'bn' ? 'লোন খতিয়ান' : 'Loans'}
           </span>
         </button>
 
-        {/* Admin Tab (if admin) */}
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('admin')}
-            className={`flex flex-col items-center justify-center py-1 px-1.5 rounded-lg transition-colors min-w-[48px] min-h-[48px] relative cursor-pointer ${
-              activeTab === 'admin'
-                ? 'text-purple-900 font-bold'
-                : 'text-purple-600 hover:text-purple-900'
-            }`}
-          >
-            <span className="text-base leading-none">👑</span>
-            <span className="text-[10px] mt-0.5 tracking-tight font-semibold">
-              {lang === 'bn' ? 'অ্যাডমিন' : 'Admin'}
-            </span>
-          </button>
-        )}
-
-        {/* User Profile Tab */}
+        {/* 5. User Profile (প্রোফাইল) */}
         <button
           type="button"
           onClick={() => {
             if (onOpenProfile) onOpenProfile();
             else setActiveTab('profile');
           }}
-          className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg transition-colors min-w-[50px] min-h-[48px] cursor-pointer ${
+          className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
             activeTab === 'profile'
               ? 'text-[#E2136E] font-bold'
-              : 'text-slate-500 hover:text-slate-800'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
           }`}
         >
-          <User className={`w-5 h-5 ${activeTab === 'profile' ? 'stroke-[2.5]' : 'stroke-[1.8]'}`} />
-          <span className="text-[10px] mt-0.5 tracking-tight font-semibold">
+          <div className="relative">
+            <User className={`w-5 h-5 transition-transform duration-200 ${
+              activeTab === 'profile' ? 'scale-110 stroke-[2.4]' : 'stroke-[1.8]'
+            }`} />
+            {isAdmin && (
+              <span className="absolute -top-1.5 -right-2 text-[9px] bg-purple-600 text-white rounded-full px-1 leading-tight font-extrabold shadow-xs">
+                👑
+              </span>
+            )}
+            {activeTab === 'profile' && (
+              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#E2136E] animate-pulse" />
+            )}
+          </div>
+          <span className="text-[10px] mt-1 font-medium tracking-tight">
             {lang === 'bn' ? 'প্রোফাইল' : 'Profile'}
           </span>
         </button>
       </div>
-    </div>
+    </nav>
   );
 };

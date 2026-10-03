@@ -156,9 +156,9 @@ export const LoansTable: React.FC<LoansTableProps> = ({
   }, [loans, selectedBorrower, searchQuery, statusFilter]);
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-xs">
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs transition-colors">
       {/* Control Bar: Search + Filter Tabs */}
-      <div className="p-4 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-50/50">
+      <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-900/60">
         {/* Search Input */}
         <div className="relative max-w-md w-full">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -169,7 +169,7 @@ export const LoansTable: React.FC<LoansTableProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t.searchPlaceholder}
-            className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#E2136E] focus:border-[#E2136E]"
+            className="w-full pl-9 pr-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl focus:outline-none focus:ring-1 focus:ring-[#E2136E] focus:border-[#E2136E]"
           />
         </div>
 
@@ -178,17 +178,17 @@ export const LoansTable: React.FC<LoansTableProps> = ({
           {/* All Loans Button */}
           <button
             onClick={() => setStatusFilter('all')}
-            className={`px-2.5 py-1.5 text-xs font-semibold rounded-md whitespace-nowrap transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer ${
+            className={`px-3 py-1.5 text-xs font-semibold rounded-xl whitespace-nowrap transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95 ${
               statusFilter === 'all'
-                ? 'bg-slate-900 text-white'
-                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
             <span>{t.filterAll}</span>
             <span
               className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono-numbers ${
-                statusFilter === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600'
+                statusFilter === 'all' ? 'bg-slate-700 dark:bg-slate-200 text-white dark:text-slate-900' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
               }`}
             >
               {lang === 'bn' ? toBanglaNumber(statusCounts.all) : statusCounts.all}
@@ -198,17 +198,17 @@ export const LoansTable: React.FC<LoansTableProps> = ({
           {/* Active Status Button */}
           <button
             onClick={() => setStatusFilter('active')}
-            className={`px-2.5 py-1.5 text-xs font-semibold rounded-md whitespace-nowrap transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer ${
+            className={`px-3 py-1.5 text-xs font-semibold rounded-xl whitespace-nowrap transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95 ${
               statusFilter === 'active'
-                ? 'bg-[#E2136E] text-white shadow-pink-100'
-                : 'bg-white text-slate-700 border border-slate-200 hover:bg-pink-50 hover:text-[#E2136E] hover:border-pink-200'
+                ? 'bg-[#E2136E] text-white shadow-pink-500/20 font-bold'
+                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-pink-50 dark:hover:bg-slate-700 hover:text-[#E2136E]'
             }`}
           >
             <Clock className="w-3.5 h-3.5" />
             <span>{t.filterActive}</span>
             <span
               className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono-numbers ${
-                statusFilter === 'active' ? 'bg-pink-700 text-white' : 'bg-slate-100 text-slate-600'
+                statusFilter === 'active' ? 'bg-pink-700 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
               }`}
             >
               {lang === 'bn' ? toBanglaNumber(statusCounts.active) : statusCounts.active}
@@ -218,12 +218,12 @@ export const LoansTable: React.FC<LoansTableProps> = ({
           {/* Overdue Status Button */}
           <button
             onClick={() => setStatusFilter('overdue')}
-            className={`px-2.5 py-1.5 text-xs font-semibold rounded-md whitespace-nowrap transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer ${
+            className={`px-3 py-1.5 text-xs font-semibold rounded-xl whitespace-nowrap transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95 ${
               statusFilter === 'overdue'
-                ? 'bg-rose-600 text-white shadow-rose-100'
+                ? 'bg-rose-600 text-white shadow-rose-500/20 font-bold'
                 : statusCounts.overdue > 0
-                ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
-                : 'bg-white text-slate-700 border border-slate-200 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200'
+                ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900 hover:bg-rose-100'
+                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-rose-50 dark:hover:bg-slate-700 hover:text-rose-700'
             }`}
           >
             <AlertTriangle className="w-3.5 h-3.5" />
@@ -233,8 +233,8 @@ export const LoansTable: React.FC<LoansTableProps> = ({
                 statusFilter === 'overdue'
                   ? 'bg-rose-800 text-white'
                   : statusCounts.overdue > 0
-                  ? 'bg-rose-200 text-rose-800 font-bold'
-                  : 'bg-slate-100 text-slate-600'
+                  ? 'bg-rose-200 dark:bg-rose-900 text-rose-800 dark:text-rose-300 font-bold'
+                  : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
               }`}
             >
               {lang === 'bn' ? toBanglaNumber(statusCounts.overdue) : statusCounts.overdue}
@@ -244,17 +244,17 @@ export const LoansTable: React.FC<LoansTableProps> = ({
           {/* Paid Status Button */}
           <button
             onClick={() => setStatusFilter('paid')}
-            className={`px-2.5 py-1.5 text-xs font-semibold rounded-md whitespace-nowrap transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer ${
+            className={`px-3 py-1.5 text-xs font-semibold rounded-xl whitespace-nowrap transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95 ${
               statusFilter === 'paid'
-                ? 'bg-emerald-600 text-white shadow-emerald-100'
-                : 'bg-white text-slate-700 border border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200'
+                ? 'bg-emerald-600 text-white shadow-emerald-500/20 font-bold'
+                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-emerald-50 dark:hover:bg-slate-700 hover:text-emerald-700'
             }`}
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
             <span>{t.filterSettled}</span>
             <span
               className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono-numbers ${
-                statusFilter === 'paid' ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-600'
+                statusFilter === 'paid' ? 'bg-emerald-700 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
               }`}
             >
               {lang === 'bn' ? toBanglaNumber(statusCounts.paid) : statusCounts.paid}
@@ -264,17 +264,17 @@ export const LoansTable: React.FC<LoansTableProps> = ({
           {/* Due Soon (Upcoming) Button */}
           <button
             onClick={() => setStatusFilter('due_soon')}
-            className={`px-2.5 py-1.5 text-xs font-semibold rounded-md whitespace-nowrap transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer ${
+            className={`px-3 py-1.5 text-xs font-semibold rounded-xl whitespace-nowrap transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95 ${
               statusFilter === 'due_soon'
-                ? 'bg-amber-600 text-white shadow-amber-100'
-                : 'bg-white text-slate-700 border border-slate-200 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200'
+                ? 'bg-amber-600 text-white shadow-amber-500/20 font-bold'
+                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-amber-50 dark:hover:bg-slate-700 hover:text-amber-700'
             }`}
           >
             <Calendar className="w-3.5 h-3.5" />
             <span>{t.filterDueSoon}</span>
             <span
               className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono-numbers ${
-                statusFilter === 'due_soon' ? 'bg-amber-700 text-white' : 'bg-slate-100 text-slate-600'
+                statusFilter === 'due_soon' ? 'bg-amber-700 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
               }`}
             >
               {lang === 'bn' ? toBanglaNumber(statusCounts.dueSoon) : statusCounts.dueSoon}
@@ -586,7 +586,7 @@ export const LoansTable: React.FC<LoansTableProps> = ({
       {/* Main Table */}
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs">
-          <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 uppercase tracking-wider text-[11px]">
+          <thead className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold border-b border-slate-200 dark:border-slate-800 uppercase tracking-wider text-[11px]">
             <tr>
               <th className="py-3 px-3.5">{t.colPerson}</th>
               <th className="py-3 px-3">{t.colLoanId}</th>
@@ -594,7 +594,7 @@ export const LoansTable: React.FC<LoansTableProps> = ({
               <th
                 onClick={() => setHighlightedEmi(highlightedEmi === 'current' ? 'all' : 'current')}
                 className={`py-3 px-3 text-right cursor-pointer transition-colors ${
-                  highlightedEmi === 'current' ? 'bg-pink-100 text-[#E2136E] font-bold ring-1 ring-inset ring-pink-300' : 'hover:bg-slate-100'
+                  highlightedEmi === 'current' ? 'bg-pink-100 text-[#E2136E] font-bold ring-1 ring-inset ring-pink-300' : 'hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
                 title="Click to toggle highlight"
               >
@@ -603,7 +603,7 @@ export const LoansTable: React.FC<LoansTableProps> = ({
               <th
                 onClick={() => setHighlightedEmi(highlightedEmi === 'second' ? 'all' : 'second')}
                 className={`py-3 px-3 text-right cursor-pointer transition-colors ${
-                  highlightedEmi === 'second' ? 'bg-blue-100 text-blue-800 font-bold ring-1 ring-inset ring-blue-300' : 'hover:bg-slate-100'
+                  highlightedEmi === 'second' ? 'bg-blue-100 text-blue-800 font-bold ring-1 ring-inset ring-blue-300' : 'hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
                 title="Click to toggle highlight"
               >
@@ -612,7 +612,7 @@ export const LoansTable: React.FC<LoansTableProps> = ({
               <th
                 onClick={() => setHighlightedEmi(highlightedEmi === 'third' ? 'all' : 'third')}
                 className={`py-3 px-3 text-right cursor-pointer transition-colors ${
-                  highlightedEmi === 'third' ? 'bg-emerald-100 text-emerald-800 font-bold ring-1 ring-inset ring-emerald-300' : 'hover:bg-slate-100'
+                  highlightedEmi === 'third' ? 'bg-emerald-100 text-emerald-800 font-bold ring-1 ring-inset ring-emerald-300' : 'hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
                 title="Click to toggle highlight"
               >
@@ -625,7 +625,7 @@ export const LoansTable: React.FC<LoansTableProps> = ({
               <th className="py-3 px-3 text-right">{t.colActions}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {filteredLoans.length === 0 ? (
               <tr>
                 <td colSpan={11} className="py-8 text-center text-slate-400">
@@ -641,12 +641,12 @@ export const LoansTable: React.FC<LoansTableProps> = ({
                 return (
                   <tr
                     key={loan.id}
-                    className={`hover:bg-slate-50 transition-colors ${
-                      isOverdue && !isSettled ? 'bg-rose-50/20' : ''
+                    className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors ${
+                      isOverdue && !isSettled ? 'bg-rose-50/20 dark:bg-rose-950/20' : ''
                     }`}
                   >
                     {/* Borrower */}
-                    <td className="py-3 px-3.5 font-medium text-slate-900 whitespace-nowrap">
+                    <td className="py-3 px-3.5 font-medium text-slate-900 dark:text-white whitespace-nowrap">
                       <button
                         onClick={() => setSelectedBorrower(loan.personName)}
                         className="hover:text-[#E2136E] hover:underline text-left cursor-pointer"
@@ -658,15 +658,15 @@ export const LoansTable: React.FC<LoansTableProps> = ({
 
                     {/* Loan ID with Quick Copy */}
                     <td className="py-3 px-3 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5 font-mono-numbers text-slate-700">
+                      <div className="flex items-center gap-1.5 font-mono-numbers text-slate-700 dark:text-slate-300">
                         <span>{loan.loanId}</span>
                         <button
                           onClick={() => copyToClipboard(loan.loanId)}
-                          className="text-slate-400 hover:text-slate-700 p-0.5 rounded"
+                          className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-0.5 rounded cursor-pointer"
                           title="Copy Loan ID"
                         >
                           {copiedId === loan.loanId ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                           ) : (
                             <Copy className="w-3.5 h-3.5" />
                           )}
@@ -675,16 +675,16 @@ export const LoansTable: React.FC<LoansTableProps> = ({
                     </td>
 
                     {/* Total Principal */}
-                    <td className="py-3 px-3 text-right font-mono-numbers text-slate-600 whitespace-nowrap">
+                    <td className="py-3 px-3 text-right font-mono-numbers text-slate-600 dark:text-slate-400 whitespace-nowrap">
                       {formatCurrency(loan.totalPrincipalLoan, lang)}
                     </td>
 
                     {/* Current Month EMI */}
                     <td
-                      className={`py-3 px-3 text-right font-mono-numbers font-semibold whitespace-nowrap transition-colors ${
+                      className={`py-3 px-3 text-right font-mono-numbers font-bold whitespace-nowrap transition-colors ${
                         highlightedEmi === 'current'
-                          ? 'bg-pink-50 text-[#E2136E] font-bold ring-1 ring-inset ring-pink-200'
-                          : 'text-slate-900'
+                          ? 'bg-pink-50 dark:bg-pink-950/40 text-[#E2136E] ring-1 ring-inset ring-pink-300 dark:ring-pink-700'
+                          : 'text-slate-900 dark:text-white'
                       }`}
                     >
                       {formatCurrency(loan.currentMonthEmi, lang)}
@@ -694,8 +694,8 @@ export const LoansTable: React.FC<LoansTableProps> = ({
                     <td
                       className={`py-3 px-3 text-right font-mono-numbers whitespace-nowrap transition-colors ${
                         highlightedEmi === 'second'
-                          ? 'bg-blue-50 text-blue-900 font-bold ring-1 ring-inset ring-blue-200'
-                          : 'text-slate-500'
+                          ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 font-bold ring-1 ring-inset ring-blue-300 dark:ring-blue-700'
+                          : 'text-slate-500 dark:text-slate-400'
                       }`}
                     >
                       {loan.secondMonthEmi > 0 ? formatCurrency(loan.secondMonthEmi, lang) : '-'}
@@ -705,8 +705,8 @@ export const LoansTable: React.FC<LoansTableProps> = ({
                     <td
                       className={`py-3 px-3 text-right font-mono-numbers whitespace-nowrap transition-colors ${
                         highlightedEmi === 'third'
-                          ? 'bg-emerald-50 text-emerald-900 font-bold ring-1 ring-inset ring-emerald-200'
-                          : 'text-slate-500'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 font-bold ring-1 ring-inset ring-emerald-300 dark:ring-emerald-700'
+                          : 'text-slate-500 dark:text-slate-400'
                       }`}
                     >
                       {loan.thirdMonthEmi > 0 ? formatCurrency(loan.thirdMonthEmi, lang) : '-'}
@@ -724,7 +724,7 @@ export const LoansTable: React.FC<LoansTableProps> = ({
 
                     {/* Next Loan Submit Date */}
                     <td className="py-3 px-3 font-mono-numbers whitespace-nowrap">
-                      <div className={isOverdue && !isSettled ? 'text-rose-600 font-bold' : 'text-slate-800'}>
+                      <div className={isOverdue && !isSettled ? 'text-rose-600 font-bold' : 'text-slate-800 dark:text-slate-200'}>
                         {loan.nextLoanSubmitDate}
                       </div>
                       {!isSettled && (

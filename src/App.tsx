@@ -43,25 +43,56 @@ const STORAGE_KEY_DARK = 'mostafizur_bkash_dark_v2';
 const STORAGE_KEY_VIEW = 'mostafizur_bkash_view_v2';
 
 export default function App() {
-  // Load state from localStorage or seed
-  const [loans, setLoans] = useState<LoanRecord[]>(() => {
+  // User & Authentication state first
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_LOANS);
+      const saved = localStorage.getItem(STORAGE_KEY_USER);
       if (saved) return JSON.parse(saved);
     } catch (e) {
       console.error(e);
     }
-    return INITIAL_LOANS;
+    return null;
+  });
+
+  // Load state from localStorage or seed - strictly isolated per user!
+  const [loans, setLoans] = useState<LoanRecord[]>(() => {
+    try {
+      const savedUserStr = localStorage.getItem(STORAGE_KEY_USER);
+      const user = savedUserStr ? JSON.parse(savedUserStr) : null;
+      if (user?.phone === '01907239952') {
+        const saved = localStorage.getItem('user_loans_01907239952') || localStorage.getItem(STORAGE_KEY_LOANS);
+        if (saved) return JSON.parse(saved);
+        return INITIAL_LOANS;
+      }
+      if (user?.phone && user?.phone !== '01613572749') {
+        const saved = localStorage.getItem(`user_loans_${user.phone}`);
+        if (saved) return JSON.parse(saved);
+        return [];
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return [];
   });
 
   const [transactions, setTransactions] = useState<PaymentTransaction[]>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_TRANSACTIONS);
-      if (saved) return JSON.parse(saved);
+      const savedUserStr = localStorage.getItem(STORAGE_KEY_USER);
+      const user = savedUserStr ? JSON.parse(savedUserStr) : null;
+      if (user?.phone === '01907239952') {
+        const saved = localStorage.getItem('user_tx_01907239952') || localStorage.getItem(STORAGE_KEY_TRANSACTIONS);
+        if (saved) return JSON.parse(saved);
+        return INITIAL_TRANSACTIONS;
+      }
+      if (user?.phone && user?.phone !== '01613572749') {
+        const saved = localStorage.getItem(`user_tx_${user.phone}`);
+        if (saved) return JSON.parse(saved);
+        return [];
+      }
     } catch (e) {
       console.error(e);
     }
-    return INITIAL_TRANSACTIONS;
+    return [];
   });
 
   const [lang, setLang] = useState<Language>(() => {
@@ -77,24 +108,14 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'borrowers' | 'loans' | 'ledger' | 'report' | 'ai' | 'admin' | 'profile'>('dashboard');
   const [selectedBorrower, setSelectedBorrower] = useState<string | null>(null);
 
-  // User & Authentication state
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_USER);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error(e);
-    }
-    return null;
-  });
-
+  // Once a user logs in, they CANNOT see landing page until they explicitly log out!
   const [showLandingPage, setShowLandingPage] = useState<boolean>(() => {
     try {
+      const savedUser = localStorage.getItem(STORAGE_KEY_USER);
+      if (savedUser) return false;
       const saved = localStorage.getItem(STORAGE_KEY_VIEW);
       if (saved === 'dashboard') return false;
-      if (saved === 'landing') return true;
     } catch (e) {}
-    // If not logged in, show landing page first!
     return true;
   });
 
@@ -479,10 +500,41 @@ export default function App() {
   };
 
   // User Authentication Handlers
-  const handleLoginSuccess = (user: UserProfile) => {
+  const handleLoginSuccess = (user: UserProfile, userLoans?: any, userTx?: any) => {
     setCurrentUser(user);
     if (user.darkMode !== undefined) setDarkMode(user.darkMode);
     setShowLandingPage(false);
+
+    if (user.phone === '01907239952') {
+      // Mostafizur personal user: Loads his personal 12 loans
+      const saved = localStorage.getItem('user_loans_01907239952') || localStorage.getItem(STORAGE_KEY_LOANS);
+      const personalLoans = saved ? JSON.parse(saved) : (userLoans || INITIAL_LOANS);
+      const savedTx = localStorage.getItem('user_tx_01907239952') || localStorage.getItem(STORAGE_KEY_TRANSACTIONS);
+      const personalTx = savedTx ? JSON.parse(savedTx) : (userTx || INITIAL_TRANSACTIONS);
+      setLoans(personalLoans);
+      setTransactions(personalTx);
+      setActiveTab('dashboard');
+    } else if (user.role === 'admin' || user.phone === '01613572749') {
+      // Super Admin: Independent platform console, zero personal loans
+      setLoans([]);
+      setTransactions([]);
+      setActiveTab('admin');
+    } else {
+      // Real registered user: Isolated blank/own loans
+      const saved = localStorage.getItem(`user_loans_${user.phone}`);
+      const realLoans = saved ? JSON.parse(saved) : (userLoans || []);
+      const savedTx = localStorage.getItem(`user_tx_${user.phone}`);
+      const realTx = savedTx ? JSON.parse(savedTx) : (userTx || []);
+      setLoans(realLoans);
+      setTransactions(realTx);
+      setActiveTab('dashboard');
+    }
+
+    try {
+      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
+      localStorage.setItem(STORAGE_KEY_VIEW, 'dashboard');
+    } catch (e) {}
+
     showToast(
       lang === 'bn'
         ? `স্বাগতম, ${user.name}! লগইন সফল হয়েছে।`
@@ -492,11 +544,19 @@ export default function App() {
 
   const handleLogout = () => {
     setCurrentUser(null);
+    setLoans([]);
+    setTransactions([]);
     setShowLandingPage(true);
+    setActiveTab('dashboard');
+    try {
+      localStorage.removeItem(STORAGE_KEY_USER);
+      localStorage.setItem(STORAGE_KEY_VIEW, 'landing');
+    } catch (e) {}
     showToast(lang === 'bn' ? 'লগআউট সম্পন্ন হয়েছে' : 'Logged out successfully');
   };
 
-  if (showLandingPage) {
+  // Once logged in, user CANNOT access landing page or login/registration without logging out first
+  if (showLandingPage && !currentUser) {
     return (
       <>
         <LandingPage
@@ -539,6 +599,8 @@ export default function App() {
         lang={lang}
         setLang={setLang}
         currentUser={currentUser}
+        darkMode={darkMode}
+        setDarkMode={setDarkMode}
         onOpenPaymentModal={() => {
           setPaymentTargetLoan(null);
           setPaymentInitialAmount(undefined);
@@ -558,7 +620,6 @@ export default function App() {
           setAuthModalMode('login');
           setIsAuthModalOpen(true);
         }}
-        onGoToLanding={() => setShowLandingPage(true)}
       />
 
       {/* Toast Notification */}
@@ -834,13 +895,6 @@ export default function App() {
           <AdminDashboard
             lang={lang}
             currentUser={currentUser}
-            loans={loans}
-            transactions={transactions}
-            onSelectBorrower={(name) => {
-              setSelectedBorrower(name);
-              setActiveTab('borrowers');
-            }}
-            onPayLoan={(l) => handlePayLoan(l, false)}
           />
         )}
 

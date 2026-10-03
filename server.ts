@@ -157,6 +157,8 @@ app.post('/api/auth/login-or-register', (req, res) => {
         role: cleanedPhone === '01613572749' ? 'admin' : 'user',
         darkMode: false,
         avatarUrl: '',
+        loans: [],
+        transactions: [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         lastLoginAt: new Date().toISOString(),
@@ -207,6 +209,8 @@ app.post('/api/auth/login-or-register', (req, res) => {
       success: true,
       isNew,
       user: safeUser,
+      loans: user.loans || null,
+      transactions: user.transactions || null,
     });
   } catch (err: any) {
     console.error('Auth error:', err);
