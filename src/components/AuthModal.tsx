@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Language } from '../types/loan';
+import { Language, LoanRecord, PaymentTransaction } from '../types/loan';
 import { UserProfile } from '../types/user';
+import { PRESET_ACCOUNTS, getInitialLoansForPhone, getInitialTransactionsForPhone } from '../data/initialLoans';
 import {
   X,
   Smartphone,
@@ -10,16 +11,15 @@ import {
   AlertCircle,
   ArrowRight,
   Sparkles,
-  Lock,
-  Eye,
-  EyeOff,
+  UserPlus,
+  LogIn,
 } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   lang: Language;
-  onLoginSuccess: (user: UserProfile) => void;
+  onLoginSuccess: (user: UserProfile, loans?: LoanRecord[], transactions?: PaymentTransaction[]) => void;
   initialMode?: 'login' | 'register';
 }
 
@@ -32,8 +32,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 }) => {
   const [phone, setPhone] = useState('');
   const [name, setName] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<'login' | 'register'>(initialMode);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -47,6 +45,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     return { isValid: bdRegex.test(cleaned), cleaned };
   };
 
+  const handleSelectPreset = (presetPhone: string, presetName: string) => {
+    setPhone(presetPhone);
+    setName(presetName);
+    setErrorMessage('');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
@@ -55,7 +59,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (!isValid) {
       setErrorMessage(
         lang === 'bn'
-          ? 'অনুগ্রহ করে সঠিক ১১ ডিজিটের বাংলাদেশী মোবাইল নম্বর দিন (যেমন: 01907239952 বা 01613572749)।'
+          ? 'অনুগ্রহ করে সঠিক ১১ ডিজিটের বাংলাদেশী মোবাইল নম্বর দিন (যেমন: 01907239952 বা 01533271817)।'
           : 'Please enter a valid 11-digit Bangladeshi mobile number.'
       );
       return;
@@ -68,61 +72,69 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    if (!password.trim()) {
-      setErrorMessage(
-        lang === 'bn' ? 'অনুগ্রহ করে পাসওয়ার্ড দিন।' : 'Please enter your password.'
-      );
-      return;
-    }
-
     setIsLoading(true);
 
     try {
-      const res = await fetch('/api/auth/login-or-register', {
+      // Direct password-free login or register endpoint
+      const endpoint = mode === 'register' ? '/api/auth/register' : '/api/auth/login';
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: cleaned,
-          password: password.trim(),
           name: name.trim() || undefined,
         }),
       });
 
       const data = await res.json();
       if (res.ok && data.user) {
-        onLoginSuccess(data.user);
+        onLoginSuccess(data.user, data.loans, data.transactions);
         onClose();
       } else {
-        setErrorMessage(data.error || (lang === 'bn' ? 'লগইন ব্যর্থ হয়েছে' : 'Authentication failed'));
+        if (mode === 'login' && res.status === 404) {
+          // If phone not registered yet, suggest registering
+          setErrorMessage(
+            lang === 'bn'
+              ? 'এই নম্বরে কোনো অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে আপনার নাম দিয়ে নিবন্ধন (Register) করুন।'
+              : 'No account found for this number. Please register with your name.'
+          );
+          setMode('register');
+        } else {
+          setErrorMessage(data.error || (lang === 'bn' ? 'লগইন ব্যর্থ হয়েছে' : 'Authentication failed'));
+        }
       }
     } catch (err: any) {
-      // Local fallback for offline/transient error
-      if (cleaned === '01907239952' && password === 'Allah2552') {
-        onLoginSuccess({
-          id: 'usr_01907239952',
-          phone: '01907239952',
-          name: 'Mostafizur Rahman',
+      // Local fallback in case server network has transient issue
+      const preset = PRESET_ACCOUNTS.find(p => p.phone === cleaned);
+      if (preset) {
+        const fallbackUser: UserProfile = {
+          id: `usr_${preset.phone}`,
+          phone: preset.phone,
+          name: preset.name,
+          role: preset.role,
+          darkMode: false,
+          createdAt: new Date().toISOString(),
+        };
+        onLoginSuccess(fallbackUser, preset.loans, preset.transactions);
+        onClose();
+      } else if (mode === 'register' && name.trim()) {
+        const newUser: UserProfile = {
+          id: `usr_${cleaned}_${Date.now()}`,
+          phone: cleaned,
+          name: name.trim(),
           role: 'user',
           darkMode: false,
           createdAt: new Date().toISOString(),
-        });
-        onClose();
-      } else if (cleaned === '01613572749' && password === 'Gmmostafizur331@') {
-        onLoginSuccess({
-          id: 'usr_admin_01613572749',
-          phone: '01613572749',
-          name: 'Admin',
-          role: 'admin',
-          darkMode: false,
-          createdAt: new Date().toISOString(),
-        });
+        };
+        onLoginSuccess(newUser, [], []);
         onClose();
       } else {
         setErrorMessage(
           lang === 'bn'
-            ? 'সার্ভারের সাথে সংযোগে সমস্যা হয়েছে অথবা পাসওয়ার্ড ভুল।'
-            : 'Connection error or invalid password.'
+            ? 'এই নম্বরে কোনো অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে নিবন্ধন করুন।'
+            : 'Account not found. Please register.'
         );
+        setMode('register');
       }
     } finally {
       setIsLoading(false);
@@ -130,189 +142,257 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-150 text-slate-900">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-150 text-slate-900 dark:text-slate-100 transition-colors">
         {/* Header */}
-        <div className="px-6 py-5 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-between">
+        <div className="px-5 py-4 sm:px-6 sm:py-5 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#E2136E] text-white flex items-center justify-center font-bold text-sm shadow-md">
-              ম
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#c40e5d] to-[#E2136E] text-white flex items-center justify-center font-black text-base shadow-md">
+              ৳
             </div>
             <div>
-              <h3 className="text-sm sm:text-base font-bold tracking-tight">
-                {lang === 'bn' ? 'ইউজার লগইন ও একাউন্ট' : 'User Account Sign In'}
+              <h3 className="text-sm sm:text-base font-extrabold tracking-tight">
+                {mode === 'login'
+                  ? (lang === 'bn' ? 'সরাসরি লগইন করুন' : 'Direct Account Sign In')
+                  : (lang === 'bn' ? 'নতুন অ্যাকাউন্ট নিবন্ধন' : 'Create Free Account')}
               </h3>
               <p className="text-[11px] text-slate-300">
                 {lang === 'bn'
-                  ? 'বাংলাদেশী মোবাইল নম্বর দিয়ে প্রবেশ বা নিবন্ধন করুন'
-                  : 'Enter with any Bangladeshi mobile number'}
+                  ? 'কোনো পাসওয়ার্ডের প্রয়োজন নেই—শুধুমাত্র মোবাইল নম্বর দিয়ে প্রবেশ'
+                  : 'No password required — instant access with phone number'}
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1 rounded-md transition-colors cursor-pointer"
+            className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Mode Toggle Tabs */}
-        <div className="flex border-b border-slate-200 bg-slate-50">
-          <button
-            type="button"
-            onClick={() => {
-              setMode('login');
-              setErrorMessage('');
-            }}
-            className={`flex-1 py-3 text-xs font-semibold text-center transition-colors cursor-pointer border-b-2 ${
-              mode === 'login'
-                ? 'border-[#E2136E] text-[#E2136E] bg-white'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            {lang === 'bn' ? 'লগইন (Sign In)' : 'Sign In'}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode('register');
-              setErrorMessage('');
-            }}
-            className={`flex-1 py-3 text-xs font-semibold text-center transition-colors cursor-pointer border-b-2 ${
-              mode === 'register'
-                ? 'border-[#E2136E] text-[#E2136E] bg-white'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            {lang === 'bn' ? 'নতুন একাউন্ট (Register)' : 'New Account'}
-          </button>
-        </div>
+        <div className="p-4 sm:p-6 space-y-4">
+          <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+            <button
+              type="button"
+              onClick={() => {
+                setMode('login');
+                setErrorMessage('');
+              }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                mode === 'login'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>{lang === 'bn' ? 'সরাসরি লগইন' : 'Direct Login'}</span>
+            </button>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
-          {errorMessage && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 flex items-start gap-2 text-xs animate-in fade-in">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
-              <span>{errorMessage}</span>
-            </div>
-          )}
-
-          {/* User Name Field (Always shown or required in Register mode) */}
-          <div>
-            <label className="block font-medium text-slate-700 mb-1">
-              {lang === 'bn' ? 'আপনার নাম' : 'Your Full Name'}{' '}
-              {mode === 'register' ? (
-                <span className="text-rose-500">*</span>
-              ) : (
-                <span className="text-slate-400 font-normal">({lang === 'bn' ? 'ঐচ্ছিক' : 'Optional'})</span>
-              )}
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                <User className="w-4 h-4" />
-              </div>
-              <input
-                type="text"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder={lang === 'bn' ? 'যেমন: মোস্তাফিজুর রহমান' : 'e.g. Mostafizur Rahman'}
-                className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:border-[#E2136E] focus:ring-1 focus:ring-[#E2136E] bg-white text-slate-900 text-xs sm:text-sm"
-              />
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setMode('register');
+                setErrorMessage('');
+              }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                mode === 'register'
+                  ? 'bg-[#E2136E] text-white shadow-2xs'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>{lang === 'bn' ? 'নতুন নিবন্ধন' : 'Register'}</span>
+            </button>
           </div>
 
-          {/* Bangladeshi Mobile Number Field */}
-          <div>
-            <label className="block font-medium text-slate-700 mb-1">
-              {lang === 'bn' ? 'বাংলাদেশী মোবাইল নম্বর' : 'Bangladeshi Mobile Number'}{' '}
-              <span className="text-rose-500">*</span>
-            </label>
-            <div className="relative flex items-center">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-700 font-semibold font-mono-numbers text-xs">
-                <span>🇧🇩 +88</span>
-              </div>
-              <input
-                type="tel"
-                value={phone}
-                onChange={e => setPhone(e.target.value)}
-                placeholder="017XXXXXXXX"
-                maxLength={14}
-                className="w-full pl-18 pr-3 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:border-[#E2136E] focus:ring-1 focus:ring-[#E2136E] bg-white text-slate-900 text-xs sm:text-sm font-mono-numbers tracking-wide"
-                required
-              />
+          {/* Quick Preset Accounts Selector (One-Tap Click) */}
+          <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                {lang === 'bn' ? 'এক ক্লিকে সংরক্ষিত অ্যাকাউন্টে প্রবেশ:' : 'Quick One-Tap Account Access:'}
+              </span>
+              <span className="text-[10px] text-[#E2136E] font-semibold">
+                {lang === 'bn' ? 'পাসওয়ার্ড মুক্ত' : 'No Password'}
+              </span>
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">
-              {lang === 'bn'
-                ? 'যেকোনো অপারেটর: Grameenphone, Banglalink, Robi, Airtel, Teletalk'
-                : 'Any BD operator: GP, Banglalink, Robi, Airtel, Teletalk'}
-            </p>
-          </div>
-
-          {/* Password Field */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block font-medium text-slate-700">
-                {lang === 'bn' ? 'পাসওয়ার্ড (Password)' : 'Password'}{' '}
-                <span className="text-rose-500">*</span>
-              </label>
-            </div>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                <Lock className="w-4 h-4" />
-              </div>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder={lang === 'bn' ? 'গোপন পাসওয়ার্ড লিখুন' : 'Enter password'}
-                className="w-full pl-9 pr-10 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:border-[#E2136E] focus:ring-1 focus:ring-[#E2136E] bg-white text-slate-900 text-xs sm:text-sm font-mono-numbers"
-                required
-              />
+            <div className="grid grid-cols-2 gap-1.5 text-xs">
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                onClick={() => handleSelectPreset('01907239952', 'Mostafizur Rahman')}
+                className="p-2 text-left bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-[#E2136E] rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95 group"
               >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white group-hover:text-[#E2136E] text-xs">
+                  <span>👑</span>
+                  <span className="truncate">মোস্তাফিজুর রহমান</span>
+                </div>
+                <div className="text-[10px] font-mono-numbers text-slate-500 dark:text-slate-400 mt-0.5">
+                  01907239952
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSelectPreset('01533271817', 'Harun')}
+                className="p-2 text-left bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-[#E2136E] rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95 group"
+              >
+                <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white group-hover:text-[#E2136E] text-xs">
+                  <span>👤</span>
+                  <span className="truncate">হারুন (Harun)</span>
+                </div>
+                <div className="text-[10px] font-mono-numbers text-slate-500 dark:text-slate-400 mt-0.5">
+                  01533271817
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSelectPreset('01830026574', 'Sohel Apu')}
+                className="p-2 text-left bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-[#E2136E] rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95 group"
+              >
+                <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white group-hover:text-[#E2136E] text-xs">
+                  <span>👤</span>
+                  <span className="truncate">সোহেল আপু (Sohel Apu)</span>
+                </div>
+                <div className="text-[10px] font-mono-numbers text-slate-500 dark:text-slate-400 mt-0.5">
+                  01830026574
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSelectPreset('01888141176', 'Musha')}
+                className="p-2 text-left bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-[#E2136E] rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95 group"
+              >
+                <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white group-hover:text-[#E2136E] text-xs">
+                  <span>👤</span>
+                  <span className="truncate">মুসা (Musha)</span>
+                </div>
+                <div className="text-[10px] font-mono-numbers text-slate-500 dark:text-slate-400 mt-0.5">
+                  01888141176
+                </div>
               </button>
             </div>
           </div>
 
-          {/* Security & Database Notice */}
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg flex items-center gap-2.5 text-[11px] text-slate-600">
-            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>
-              {lang === 'bn'
-                ? 'আপনার সকল লোন তথ্য ও সেটিংস সার্ভার ডাটাবেজে সম্পূর্ণ নিরাপদে সংরক্ষিত থাকবে।'
-                : 'Your loan records, payments, and settings will be safely saved in the server database.'}
-            </span>
-          </div>
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-3.5">
+            {errorMessage && (
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 rounded-xl text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                <span className="leading-tight">{errorMessage}</span>
+              </div>
+            )}
 
-          {/* Submit Button */}
-          <div className="pt-2">
+            {/* Name Field (Visible on Register Mode) */}
+            {mode === 'register' && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  {lang === 'bn' ? 'আপনার নাম লিখুন' : 'Your Full Name'}
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <User className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder={lang === 'bn' ? 'যেমন: মোস্তাফিজুর রহমান' : 'e.g. Mostafizur Rahman'}
+                    className="w-full pl-9 pr-3 py-2.5 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl focus:outline-none focus:ring-1 focus:ring-[#E2136E] focus:border-[#E2136E]"
+                    required
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Mobile Number Field (Always visible) */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                {lang === 'bn' ? '১১ ডিজিটের মোবাইল নম্বর' : 'Bangladeshi Mobile Number'}
+              </label>
+              <div className="relative flex items-center">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500 dark:text-slate-400 font-semibold font-mono-numbers text-xs">
+                  <span>🇧🇩 +88</span>
+                </div>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="01XXXXXXXXX"
+                  className="w-full pl-18 pr-3 py-2.5 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl focus:outline-none focus:ring-1 focus:ring-[#E2136E] focus:border-[#E2136E] font-mono-numbers tracking-wide"
+                  required
+                />
+              </div>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+                {mode === 'login'
+                  ? (lang === 'bn' ? 'আপনার নিবন্ধিত নম্বরটি দিন (পাসওয়ার্ড লাগবে না)' : 'Enter your registered number (No password needed)')
+                  : (lang === 'bn' ? 'এই নম্বর দিয়ে আপনার নিজস্ব অ্যাকাউন্ট তৈরি হবে' : 'Your new personal account will be created with this number')}
+              </p>
+            </div>
+
+            {/* Submit CTA Button */}
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-2.5 px-4 bg-[#E2136E] hover:bg-[#c40e5d] text-white rounded-lg font-bold text-xs sm:text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              className="w-full py-2.5 sm:py-3 bg-gradient-to-r from-[#c40e5d] to-[#E2136E] hover:from-[#b00b52] hover:to-[#c40e5d] text-white font-bold rounded-xl shadow-md shadow-pink-600/30 transition-all duration-200 active:scale-95 text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              <span>
-                {isLoading
-                  ? lang === 'bn'
-                    ? 'প্রক্রিয়াকরণ হচ্ছে...'
-                    : 'Processing...'
-                  : mode === 'login'
-                  ? lang === 'bn'
-                    ? 'লগইন করুন'
-                    : 'Sign In'
-                  : lang === 'bn'
-                  ? 'নিবন্ধন সম্পন্ন করুন'
-                  : 'Register Account'}
-              </span>
-              <ArrowRight className="w-4 h-4" />
+              {isLoading ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <>
+                  {mode === 'login' ? (
+                    <>
+                      <LogIn className="w-4 h-4" />
+                      <span>{lang === 'bn' ? 'লগইন করুন ও হিসাব দেখুন' : 'Sign In & Access Account'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="w-4 h-4" />
+                      <span>{lang === 'bn' ? 'নিবন্ধন সম্পন্ন করুন' : 'Complete Registration'}</span>
+                    </>
+                  )}
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
+          </form>
+
+          {/* Bottom Security Assurance */}
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+            <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-semibold">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>{lang === 'bn' ? 'ক্লাউড ডাটাবেজ সুরক্ষিত' : 'Cloud Database Secured'}</span>
+            </span>
+            <span>
+              {mode === 'login' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('register');
+                    setErrorMessage('');
+                  }}
+                  className="text-[#E2136E] hover:underline font-bold cursor-pointer"
+                >
+                  {lang === 'bn' ? 'নতুন অ্যাকাউন্ট খুলুন' : 'New? Register here'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('login');
+                    setErrorMessage('');
+                  }}
+                  className="text-[#E2136E] hover:underline font-bold cursor-pointer"
+                >
+                  {lang === 'bn' ? 'সরাসরি লগইন' : 'Already have account? Sign in'}
+                </button>
+              )}
+            </span>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );

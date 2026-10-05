@@ -29,6 +29,7 @@ interface InteractiveAnalyticsDashboardProps {
   onPayLoan: (loan: LoanRecord, fullSettlement?: boolean) => void;
   onViewReceipt: (loan: LoanRecord) => void;
   onSelectBorrowerFilter: (borrowerName: string) => void;
+  isReadOnly?: boolean;
 }
 
 type AnalyticsViewMode = 'status_donut' | 'cashflow_bars' | 'borrower_map' | 'risk_clusters';
@@ -48,6 +49,7 @@ export const InteractiveAnalyticsDashboard: React.FC<InteractiveAnalyticsDashboa
   onPayLoan,
   onViewReceipt,
   onSelectBorrowerFilter,
+  isReadOnly = false,
 }) => {
   const [activeView, setActiveView] = useState<AnalyticsViewMode>('status_donut');
   const [drillDown, setDrillDown] = useState<DrillDownState | null>(null);
@@ -995,27 +997,31 @@ export const InteractiveAnalyticsDashboard: React.FC<InteractiveAnalyticsDashboa
                       <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                         {!isSettled ? (
                           <>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setDrillDown(null);
-                                onPayLoan(loan, false);
-                              }}
-                              className="px-3 py-1.5 text-xs font-semibold text-white bg-[#E2136E] hover:bg-[#c40e5d] rounded-md transition-colors shadow-2xs cursor-pointer flex items-center gap-1"
-                            >
-                              <CreditCard className="w-3.5 h-3.5" />
-                              <span>{lang === 'bn' ? 'কিস্তি জমা' : 'Pay EMI'}</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setDrillDown(null);
-                                onPayLoan(loan, true);
-                              }}
-                              className="px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-md transition-colors cursor-pointer"
-                            >
-                              {lang === 'bn' ? 'পূর্ণ পরিশোধ' : 'Settle'}
-                            </button>
+                            {!isReadOnly && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setDrillDown(null);
+                                    onPayLoan(loan, false);
+                                  }}
+                                  className="px-3 py-1.5 text-xs font-semibold text-white bg-[#E2136E] hover:bg-[#c40e5d] rounded-md transition-colors shadow-2xs cursor-pointer flex items-center gap-1"
+                                >
+                                  <CreditCard className="w-3.5 h-3.5" />
+                                  <span>{lang === 'bn' ? 'কিস্তি জমা' : 'Pay EMI'}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setDrillDown(null);
+                                    onPayLoan(loan, true);
+                                  }}
+                                  className="px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-md transition-colors cursor-pointer"
+                                >
+                                  {lang === 'bn' ? 'পূর্ণ পরিশোধ' : 'Settle'}
+                                </button>
+                              </>
+                            )}
                           </>
                         ) : (
                           <button

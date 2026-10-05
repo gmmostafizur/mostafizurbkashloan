@@ -5,8 +5,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { LoanRecord, PaymentTransaction, Language } from './types/loan';
-import { INITIAL_LOANS, INITIAL_TRANSACTIONS } from './data/initialLoans';
-import { Navbar } from './components/Navbar';
+import {
+  INITIAL_LOANS,
+  INITIAL_TRANSACTIONS,
+  getInitialLoansForPhone,
+  getInitialTransactionsForPhone,
+} from './data/initialLoans';
+import { NavigationSidebar } from './components/NavigationSidebar';
 import { StatsCards } from './components/StatsCards';
 import { MonthlyCollectionGoal } from './components/MonthlyCollectionGoal';
 import { InteractiveAnalyticsDashboard } from './components/InteractiveAnalyticsDashboard';
@@ -59,40 +64,30 @@ export default function App() {
     try {
       const savedUserStr = localStorage.getItem(STORAGE_KEY_USER);
       const user = savedUserStr ? JSON.parse(savedUserStr) : null;
-      if (user?.phone === '01907239952') {
-        const saved = localStorage.getItem('user_loans_01907239952') || localStorage.getItem(STORAGE_KEY_LOANS);
+      if (user?.phone) {
+        const saved = localStorage.getItem(`user_loans_${user.phone}`) || (user.phone === '01907239952' ? localStorage.getItem(STORAGE_KEY_LOANS) : null);
         if (saved) return JSON.parse(saved);
-        return INITIAL_LOANS;
-      }
-      if (user?.phone && user?.phone !== '01613572749') {
-        const saved = localStorage.getItem(`user_loans_${user.phone}`);
-        if (saved) return JSON.parse(saved);
-        return [];
+        return getInitialLoansForPhone(user.phone);
       }
     } catch (e) {
       console.error(e);
     }
-    return [];
+    return INITIAL_LOANS;
   });
 
   const [transactions, setTransactions] = useState<PaymentTransaction[]>(() => {
     try {
       const savedUserStr = localStorage.getItem(STORAGE_KEY_USER);
       const user = savedUserStr ? JSON.parse(savedUserStr) : null;
-      if (user?.phone === '01907239952') {
-        const saved = localStorage.getItem('user_tx_01907239952') || localStorage.getItem(STORAGE_KEY_TRANSACTIONS);
+      if (user?.phone) {
+        const saved = localStorage.getItem(`user_tx_${user.phone}`) || (user.phone === '01907239952' ? localStorage.getItem(STORAGE_KEY_TRANSACTIONS) : null);
         if (saved) return JSON.parse(saved);
-        return INITIAL_TRANSACTIONS;
-      }
-      if (user?.phone && user?.phone !== '01613572749') {
-        const saved = localStorage.getItem(`user_tx_${user.phone}`);
-        if (saved) return JSON.parse(saved);
-        return [];
+        return getInitialTransactionsForPhone(user.phone);
       }
     } catch (e) {
       console.error(e);
     }
-    return [];
+    return INITIAL_TRANSACTIONS;
   });
 
   const [lang, setLang] = useState<Language>(() => {
@@ -151,22 +146,38 @@ export default function App() {
 
   const t = getT(lang);
 
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.phone === '01907239952' || currentUser?.phone === '01613572749';
+  const isReadOnly = !isAdmin;
+
+  // Regular user restriction: "user ra sudhu tader loan, payment history, monthly report dekhte parbe ar kichu korte parbe na"
+  useEffect(() => {
+    if (isReadOnly && (activeTab === 'dashboard' || activeTab === 'borrowers' || activeTab === 'ai' || activeTab === 'admin')) {
+      setActiveTab('loans');
+    }
+  }, [isReadOnly, activeTab]);
+
   // Persist state
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_LOANS, JSON.stringify(loans));
+      if (currentUser?.phone) {
+        localStorage.setItem(`user_loans_${currentUser.phone}`, JSON.stringify(loans));
+      }
     } catch (e) {
       console.error(e);
     }
-  }, [loans]);
+  }, [loans, currentUser?.phone]);
 
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_TRANSACTIONS, JSON.stringify(transactions));
+      if (currentUser?.phone) {
+        localStorage.setItem(`user_tx_${currentUser.phone}`, JSON.stringify(transactions));
+      }
     } catch (e) {
       console.error(e);
     }
-  }, [transactions]);
+  }, [transactions, currentUser?.phone]);
 
   useEffect(() => {
     try {
@@ -505,29 +516,35 @@ export default function App() {
     if (user.darkMode !== undefined) setDarkMode(user.darkMode);
     setShowLandingPage(false);
 
-    if (user.phone === '01907239952') {
-      // Mostafizur personal user: Loads his personal 12 loans
-      const saved = localStorage.getItem('user_loans_01907239952') || localStorage.getItem(STORAGE_KEY_LOANS);
-      const personalLoans = saved ? JSON.parse(saved) : (userLoans || INITIAL_LOANS);
-      const savedTx = localStorage.getItem('user_tx_01907239952') || localStorage.getItem(STORAGE_KEY_TRANSACTIONS);
-      const personalTx = savedTx ? JSON.parse(savedTx) : (userTx || INITIAL_TRANSACTIONS);
-      setLoans(personalLoans);
-      setTransactions(personalTx);
-      setActiveTab('dashboard');
-    } else if (user.role === 'admin' || user.phone === '01613572749') {
-      // Super Admin: Independent platform console, zero personal loans
+    if (user.role === 'admin' && user.phone === '01613572749') {
+      // Super Admin platform console
       setLoans([]);
       setTransactions([]);
       setActiveTab('admin');
     } else {
-      // Real registered user: Isolated blank/own loans
-      const saved = localStorage.getItem(`user_loans_${user.phone}`);
-      const realLoans = saved ? JSON.parse(saved) : (userLoans || []);
-      const savedTx = localStorage.getItem(`user_tx_${user.phone}`);
-      const realTx = savedTx ? JSON.parse(savedTx) : (userTx || []);
-      setLoans(realLoans);
-      setTransactions(realTx);
-      setActiveTab('dashboard');
+      // Resolve loans for this account:
+      // Priority 1: Backend payload (if non-empty)
+      // Priority 2: Stored localStorage for this phone
+      // Priority 3: Preset account loans (Mostafizur has all 12, Harun has his 4, Sohel Apu has 1, Musha has 1)
+      const savedLoansStr = localStorage.getItem(`user_loans_${user.phone}`) || (user.phone === '01907239952' ? localStorage.getItem(STORAGE_KEY_LOANS) : null);
+      const resolvedLoans = (userLoans && userLoans.length > 0)
+        ? userLoans
+        : (savedLoansStr ? JSON.parse(savedLoansStr) : getInitialLoansForPhone(user.phone));
+
+      const savedTxStr = localStorage.getItem(`user_tx_${user.phone}`) || (user.phone === '01907239952' ? localStorage.getItem(STORAGE_KEY_TRANSACTIONS) : null);
+      const resolvedTx = (userTx && userTx.length > 0)
+        ? userTx
+        : (savedTxStr ? JSON.parse(savedTxStr) : getInitialTransactionsForPhone(user.phone));
+
+      setLoans(resolvedLoans);
+      setTransactions(resolvedTx);
+      const isUserAdmin = user.role === 'admin' || user.phone === '01907239952' || user.phone === '01613572749';
+      setActiveTab(isUserAdmin ? 'dashboard' : 'loans');
+
+      try {
+        localStorage.setItem(`user_loans_${user.phone}`, JSON.stringify(resolvedLoans));
+        localStorage.setItem(`user_tx_${user.phone}`, JSON.stringify(resolvedTx));
+      } catch (e) {}
     }
 
     try {
@@ -591,9 +608,9 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors">
-      {/* Top Navbar */}
-      <Navbar
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col md:flex-row font-sans transition-colors">
+      {/* Computer Screens: Left Side Navigation Panel (NO top bar on computer screens!) */}
+      <NavigationSidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         lang={lang}
@@ -601,58 +618,62 @@ export default function App() {
         currentUser={currentUser}
         darkMode={darkMode}
         setDarkMode={setDarkMode}
+        isReadOnly={isReadOnly}
         onOpenPaymentModal={() => {
+          if (isReadOnly) return;
           setPaymentTargetLoan(null);
           setPaymentInitialAmount(undefined);
           setPaymentInitialNote(undefined);
           setIsPaymentModalOpen(true);
         }}
         onOpenNewLoanModal={() => {
+          if (isReadOnly) return;
           setLoanToEdit(null);
           setIsNewLoanModalOpen(true);
         }}
-        onOpenRolloverModal={() => setIsRolloverModalOpen(true)}
-        onResetData={handleResetData}
-        onExportCSV={() => exportLoansToCSV(loans, lang)}
-        onExportPDF={() => exportLoansToPDF(loans, lang)}
-        onOpenSettings={() => setIsSettingsModalOpen(true)}
-        onOpenAuth={() => {
-          setAuthModalMode('login');
-          setIsAuthModalOpen(true);
+        onOpenRolloverModal={() => {
+          if (isReadOnly) return;
+          setIsRolloverModalOpen(true);
         }}
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
+        onLogout={handleLogout}
       />
 
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="no-print fixed bottom-5 right-5 z-50 max-w-md bg-slate-900 text-white text-xs font-medium px-4 py-3 rounded-lg shadow-xl border border-slate-700 flex items-center justify-between gap-3 animate-in slide-in-from-bottom-3 duration-200">
-          <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>{toastMessage}</span>
+      {/* Main Workspace Container (Right side on desktop, full width on mobile) */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Toast Notification */}
+        {toastMessage && (
+          <div className="no-print fixed bottom-5 right-5 z-50 max-w-md bg-slate-900 text-white text-xs font-medium px-4 py-3 rounded-lg shadow-xl border border-slate-700 flex items-center justify-between gap-3 animate-in slide-in-from-bottom-3 duration-200">
+            <div className="flex items-center gap-2.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{toastMessage}</span>
+            </div>
+            {receiptTx && (
+              <button
+                onClick={() => setIsReceiptModalOpen(true)}
+                className="shrink-0 px-2.5 py-1 text-[11px] font-semibold text-white bg-[#E2136E] hover:bg-[#c40e5d] rounded transition-colors cursor-pointer shadow-2xs ml-2"
+              >
+                {lang === 'bn' ? 'রশিদ দেখুন' : 'View Receipt'}
+              </button>
+            )}
           </div>
-          {receiptTx && (
-            <button
-              onClick={() => setIsReceiptModalOpen(true)}
-              className="shrink-0 px-2.5 py-1 text-[11px] font-semibold text-white bg-[#E2136E] hover:bg-[#c40e5d] rounded transition-colors cursor-pointer shadow-2xs ml-2"
-            >
-              {lang === 'bn' ? 'রশিদ দেখুন' : 'View Receipt'}
-            </button>
-          )}
-        </div>
-      )}
+        )}
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 md:pb-6 space-y-6">
-        {/* Top natural language query & search bar */}
-        <QuickCommandBar
-          loans={loans}
-          lang={lang}
-          onExecuteCommand={handleExecuteCommand}
-          onDirectSearch={(query) => {
-            setSelectedBorrower(query);
-            setActiveTab('loans');
-          }}
-          onNewLoanFromScreenshot={handleNewLoanFromScreenshot}
-        />
+        {/* Main Content Area */}
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 md:pb-6 space-y-6">
+          {/* Top natural language query & search bar - for Managers only */}
+          {!isReadOnly && (
+            <QuickCommandBar
+              loans={loans}
+              lang={lang}
+              onExecuteCommand={handleExecuteCommand}
+              onDirectSearch={(query) => {
+                setSelectedBorrower(query);
+                setActiveTab('loans');
+              }}
+              onNewLoanFromScreenshot={handleNewLoanFromScreenshot}
+            />
+          )}
 
         {/* Dashboard Tab */}
         {activeTab === 'dashboard' && (
@@ -770,13 +791,14 @@ export default function App() {
                 onPayLoan={handlePayLoan}
                 onViewReceipt={handleViewReceiptForLoan}
                 onEditLoan={handleEditLoan}
+                isReadOnly={isReadOnly}
               />
             </div>
           </div>
         )}
 
         {/* Borrowers View Tab */}
-        {activeTab === 'borrowers' && (
+        {activeTab === 'borrowers' && !isReadOnly && (
           <div className="space-y-6">
             {/* Borrower selector bar */}
             <div className="bg-white p-4 rounded-lg border border-slate-200">
@@ -845,6 +867,7 @@ export default function App() {
               onPayLoan={handlePayLoan}
               onViewReceipt={handleViewReceiptForLoan}
               onEditLoan={handleEditLoan}
+              isReadOnly={isReadOnly}
             />
           </div>
         )}
@@ -987,9 +1010,9 @@ export default function App() {
       />
 
       {/* Footer */}
-      <footer className="no-print mt-auto border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500 mb-14 md:mb-0">
+      <footer className="no-print mt-auto border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-4 text-center text-xs text-slate-500 mb-14 md:mb-0 transition-colors">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div className="flex items-center gap-1 text-slate-600 font-medium">
+          <div className="flex items-center gap-1 text-slate-600 dark:text-slate-400 font-medium">
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
             <span>Mostafizur bKash Loan Management System</span>
           </div>
@@ -1000,6 +1023,7 @@ export default function App() {
           </div>
         </div>
       </footer>
+      </div>
 
       {/* Mobile Bottom Navigation Dock */}
       <MobileBottomNav
@@ -1007,13 +1031,15 @@ export default function App() {
         setActiveTab={setActiveTab}
         lang={lang}
         onOpenPaymentModal={() => {
+          if (isReadOnly) return;
           setPaymentTargetLoan(null);
           setPaymentInitialAmount(undefined);
           setPaymentInitialNote(undefined);
           setIsPaymentModalOpen(true);
         }}
         overdueCount={loans.filter(l => l.totalDue > 0 && isDateOverdue(l.nextLoanSubmitDate)).length}
-        isAdmin={currentUser?.role === 'admin' || currentUser?.phone === '01613572749'}
+        isAdmin={isAdmin}
+        isReadOnly={isReadOnly}
         onOpenProfile={() => setActiveTab('profile')}
       />
     </div>

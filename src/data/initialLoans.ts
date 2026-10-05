@@ -215,3 +215,73 @@ export const INITIAL_TRANSACTIONS: PaymentTransaction[] = [
     note: 'Partial installment payment',
   },
 ];
+
+export interface PresetAccount {
+  phone: string;
+  name: string;
+  role: 'admin' | 'user';
+  loans: LoanRecord[];
+  transactions: PaymentTransaction[];
+}
+
+export const PRESET_ACCOUNTS: PresetAccount[] = [
+  {
+    phone: '01907239952',
+    name: 'Mostafizur Rahman',
+    role: 'admin',
+    loans: INITIAL_LOANS,
+    transactions: INITIAL_TRANSACTIONS,
+  },
+  {
+    phone: '01533271817',
+    name: 'Harun',
+    role: 'user',
+    loans: INITIAL_LOANS.filter(l => l.personName.trim().toLowerCase() === 'harun'),
+    transactions: INITIAL_TRANSACTIONS.filter(t => t.personName.trim().toLowerCase() === 'harun'),
+  },
+  {
+    phone: '01830026574',
+    name: 'Sohel Apu',
+    role: 'user',
+    loans: INITIAL_LOANS.filter(l => l.personName.trim().toLowerCase() === 'sohel apu'),
+    transactions: INITIAL_TRANSACTIONS.filter(t => t.personName.trim().toLowerCase() === 'sohel apu'),
+  },
+  {
+    phone: '01888141176',
+    name: 'Musha',
+    role: 'user',
+    loans: INITIAL_LOANS.filter(l => l.personName.trim().toLowerCase() === 'musha'),
+    transactions: INITIAL_TRANSACTIONS.filter(t => t.personName.trim().toLowerCase() === 'musha'),
+  },
+  {
+    phone: '01613572749',
+    name: 'Admin',
+    role: 'admin',
+    loans: [],
+    transactions: [],
+  },
+];
+
+export function getInitialLoansForPhone(phone: string): LoanRecord[] {
+  const cleaned = phone.replace(/[\s\-\+]/g, '').replace(/^88/, '');
+  if (cleaned === '01907239952') {
+    return INITIAL_LOANS;
+  }
+  const preset = PRESET_ACCOUNTS.find(a => a.phone === cleaned);
+  if (preset) {
+    return preset.loans;
+  }
+  return [];
+}
+
+export function getInitialTransactionsForPhone(phone: string): PaymentTransaction[] {
+  const cleaned = phone.replace(/[\s\-\+]/g, '').replace(/^88/, '');
+  if (cleaned === '01907239952') {
+    return INITIAL_TRANSACTIONS;
+  }
+  const preset = PRESET_ACCOUNTS.find(a => a.phone === cleaned);
+  if (preset) {
+    return preset.transactions;
+  }
+  return [];
+}

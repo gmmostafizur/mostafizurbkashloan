@@ -23,6 +23,7 @@ interface MonthlyCalendarViewProps {
   lang: Language;
   onPayLoan: (loan: LoanRecord) => void;
   onSelectBorrower?: (borrowerName: string) => void;
+  isReadOnly?: boolean;
 }
 
 const BANGLA_MONTHS = [
@@ -48,6 +49,7 @@ export const MonthlyCalendarView: React.FC<MonthlyCalendarViewProps> = ({
   lang,
   onPayLoan,
   onSelectBorrower,
+  isReadOnly = false,
 }) => {
   const t = getT(lang);
 
@@ -496,14 +498,16 @@ export const MonthlyCalendarView: React.FC<MonthlyCalendarViewProps> = ({
                             <span className="text-[10px] text-slate-400">
                               {lang === 'bn' ? 'জমা তারিখ:' : 'Due Date:'} {loan.nextLoanSubmitDate}
                             </span>
-                            <button
-                              type="button"
-                              onClick={() => onPayLoan(loan)}
-                              className="px-2.5 py-1 text-xs font-semibold text-white bg-[#E2136E] hover:bg-[#c40e5d] rounded flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
-                            >
-                              <span>{t.recordPayment}</span>
-                              <ArrowRight className="w-3 h-3" />
-                            </button>
+                            {!isReadOnly && loan.status !== 'paid' && (
+                              <button
+                                type="button"
+                                onClick={() => onPayLoan(loan)}
+                                className="px-2.5 py-1 text-xs font-semibold text-white bg-[#E2136E] hover:bg-[#c40e5d] rounded flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
+                              >
+                                <span>{t.recordPayment}</span>
+                                <ArrowRight className="w-3 h-3" />
+                              </button>
+                            )}
                           </div>
                         </div>
                       );

@@ -19,6 +19,18 @@ app.use(express.json({ limit: '20mb' }));
 // Database directory & persistent file initialization
 const DATA_DIR = path.resolve(__dirname, 'data');
 const DB_FILE = path.resolve(DATA_DIR, 'database.json');
+const PRESET_FILE = path.resolve(DATA_DIR, 'presetAccounts.json');
+
+function getPresetAccounts(): any[] {
+  try {
+    if (fs.existsSync(PRESET_FILE)) {
+      return JSON.parse(fs.readFileSync(PRESET_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.warn('Could not read presetAccounts.json:', e);
+  }
+  return [];
+}
 
 function initDatabase() {
   try {
@@ -36,57 +48,52 @@ function initDatabase() {
     if (!db.users) db.users = {};
     if (!db.activityLogs) db.activityLogs = [];
 
-    // 1. Personal User for Mostafizur Rahman: 01907239952 / Allah2552
-    const personalPhone = '01907239952';
-    if (!db.users[personalPhone]) {
-      db.users[personalPhone] = {
-        id: `usr_${personalPhone}`,
-        phone: personalPhone,
-        name: 'Mostafizur Rahman',
-        password: 'Allah2552',
-        role: 'user',
-        darkMode: false,
-        avatarUrl: '',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString(),
-      };
-    } else {
-      db.users[personalPhone].name = 'Mostafizur Rahman';
-      db.users[personalPhone].password = 'Allah2552';
-      db.users[personalPhone].role = 'user';
+    // Seed preset accounts: Mostafizur Rahman (01907239952), Harun (01533271817), Sohel Apu (01830026574), Musha (01888141176), Admin (01613572749)
+    const presetAccounts = getPresetAccounts();
+    for (const preset of presetAccounts) {
+      if (!db.users[preset.phone]) {
+        db.users[preset.phone] = {
+          id: `usr_${preset.phone}`,
+          phone: preset.phone,
+          name: preset.name,
+          role: preset.role,
+          darkMode: false,
+          avatarUrl: '',
+          loans: preset.loans,
+          transactions: preset.transactions,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          lastLoginAt: new Date().toISOString(),
+        };
+      } else {
+        // Keep updated name, role, and attach preset loans if loans list is empty
+        db.users[preset.phone].name = preset.name;
+        db.users[preset.phone].role = preset.role;
+        if (!db.users[preset.phone].loans || db.users[preset.phone].loans.length === 0) {
+          db.users[preset.phone].loans = preset.loans;
+        }
+        if (!db.users[preset.phone].transactions || db.users[preset.phone].transactions.length === 0) {
+          db.users[preset.phone].transactions = preset.transactions;
+        }
+        // Remove password requirement from existing accounts
+        delete db.users[preset.phone].password;
+      }
     }
 
-    // 2. Admin User: 01613572749 / Gmmostafizur331@
-    const adminPhone = '01613572749';
-    if (!db.users[adminPhone]) {
-      db.users[adminPhone] = {
-        id: `usr_admin_${adminPhone}`,
-        phone: adminPhone,
-        name: 'Admin',
-        password: 'Gmmostafizur331@',
-        role: 'admin',
-        darkMode: false,
-        avatarUrl: '',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString(),
-      };
-    } else {
-      db.users[adminPhone].name = 'Admin';
-      db.users[adminPhone].password = 'Gmmostafizur331@';
-      db.users[adminPhone].role = 'admin';
+    // Strip passwords from any user accounts across the system
+    for (const phoneKey of Object.keys(db.users)) {
+      delete db.users[phoneKey].password;
     }
 
     // Initial demo log if empty
     if (db.activityLogs.length === 0) {
       db.activityLogs.push({
         id: `log_init_${Date.now()}`,
-        userId: `usr_${personalPhone}`,
+        userId: 'usr_01907239952',
         userName: 'Mostafizur Rahman',
-        userPhone: personalPhone,
+        userPhone: '01907239952',
         action: 'SYSTEM_SETUP',
-        description: 'সিস্টেমে মোস্তাফিজুর রহমান ও অ্যাডমিন অ্যাকাউন্ট সক্রিয় করা হয়েছে',
+        description: 'সিস্টেমে মোস্তাফিজুর রহমান, হারুন, সোহেল আপু, মুসা ও অ্যাডমিন অ্যাকাউন্ট সক্রিয় করা হয়েছে',
         timestamp: new Date().toISOString(),
         device: 'System Server',
       });
@@ -129,18 +136,136 @@ function writeDatabase(data: any): boolean {
 
 // ================= USER AUTH & DATABASE ROUTES =================
 
-// 1. Login or Register with Bangladeshi Phone Number, Password & Name
+// 1. Password-Free Direct Login with Phone Number
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const { phone } = req.body;
+    if (!phone || typeof phone !== 'string') {
+      return res.status(400).json({ error: 'মোবাইল নম্বর দেওয়া বাধ্যতামূলক' });
+    }
+
+    const cleanedPhone = phone.replace(/[\s\-\+]/g, '').replace(/^88/, '');
+    const db = readDatabase();
+    const user = db.users?.[cleanedPhone];
+
+    if (!user) {
+      return res.status(404).json({
+        error: 'এই নম্বরে কোনো অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে রেজিস্ট্রেশন করুন।'
+      });
+    }
+
+    user.lastLoginAt = new Date().toISOString();
+    user.updatedAt = new Date().toISOString();
+    db.users[cleanedPhone] = user;
+
+    const userAgent = (req.headers['user-agent'] || 'Web Browser').toString().slice(0, 80);
+    db.activityLogs.unshift({
+      id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      userId: user.id,
+      userName: user.name,
+      userPhone: user.phone,
+      action: 'LOGIN',
+      description: `${user.name} (${user.phone}) মোবাইল নম্বর দিয়ে পাসওয়ার্ড ছাড়াই সরাসরি লগইন করেছেন`,
+      timestamp: new Date().toISOString(),
+      device: userAgent,
+    });
+    if (db.activityLogs.length > 300) db.activityLogs = db.activityLogs.slice(0, 300);
+    writeDatabase(db);
+
+    const { password: _p, ...safeUser } = user;
+    return res.json({
+      success: true,
+      user: safeUser,
+      loans: user.loans || [],
+      transactions: user.transactions || [],
+    });
+  } catch (err: any) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// 2. Password-Free Registration with Phone and Name
+app.post('/api/auth/register', (req, res) => {
+  try {
+    const { phone, name } = req.body;
+    if (!phone || typeof phone !== 'string') {
+      return res.status(400).json({ error: 'মোবাইল নম্বর দেওয়া বাধ্যতামূলক' });
+    }
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'আপনার নাম দেওয়া বাধ্যতামূলক' });
+    }
+
+    const cleanedPhone = phone.replace(/[\s\-\+]/g, '').replace(/^88/, '');
+    const db = readDatabase();
+    if (!db.users) db.users = {};
+    if (!db.activityLogs) db.activityLogs = [];
+
+    let user = db.users[cleanedPhone];
+    const isNew = !user;
+
+    if (isNew) {
+      user = {
+        id: `usr_${cleanedPhone}_${Date.now()}`,
+        phone: cleanedPhone,
+        name: name.trim(),
+        role: cleanedPhone === '01613572749' || cleanedPhone === '01907239952' ? 'admin' : 'user',
+        darkMode: false,
+        avatarUrl: '',
+        loans: [],
+        transactions: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString(),
+      };
+      db.users[cleanedPhone] = user;
+    } else {
+      user.name = name.trim();
+      user.lastLoginAt = new Date().toISOString();
+      user.updatedAt = new Date().toISOString();
+      db.users[cleanedPhone] = user;
+    }
+
+    const userAgent = (req.headers['user-agent'] || 'Web Browser').toString().slice(0, 80);
+    db.activityLogs.unshift({
+      id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      userId: user.id,
+      userName: user.name,
+      userPhone: user.phone,
+      action: 'LOGIN',
+      description: isNew
+        ? `${user.name} (${user.phone}) নতুন অ্যাকাউন্ট নিবন্ধন করে সিস্টেমে প্রবেশ করেছেন`
+        : `${user.name} (${user.phone}) তথ্য আপডেট করে লগইন করেছেন`,
+      timestamp: new Date().toISOString(),
+      device: userAgent,
+    });
+    if (db.activityLogs.length > 300) db.activityLogs = db.activityLogs.slice(0, 300);
+    writeDatabase(db);
+
+    const { password: _p, ...safeUser } = user;
+    return res.json({
+      success: true,
+      isNew,
+      user: safeUser,
+      loans: user.loans || [],
+      transactions: user.transactions || [],
+    });
+  } catch (err: any) {
+    console.error('Registration error:', err);
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+// 3. Login or Register (Fallback / Flexible Endpoint, No Password Required)
 app.post('/api/auth/login-or-register', (req, res) => {
   try {
-    const { phone, name, password } = req.body;
+    const { phone, name } = req.body;
 
     if (!phone || typeof phone !== 'string') {
       return res.status(400).json({ error: 'মোবাইল নম্বর দেওয়া বাধ্যতামূলক' });
     }
 
-    // Clean phone number (strip whitespace, hyphens, and leading +88)
     const cleanedPhone = phone.replace(/[\s\-\+]/g, '').replace(/^88/, '');
-
     const db = readDatabase();
     if (!db.users) db.users = {};
     if (!db.activityLogs) db.activityLogs = [];
@@ -153,8 +278,7 @@ app.post('/api/auth/login-or-register', (req, res) => {
         id: `usr_${cleanedPhone}_${Date.now()}`,
         phone: cleanedPhone,
         name: (name && name.trim()) || 'ব্যবহারকারী',
-        password: (password && password.trim()) || '',
-        role: cleanedPhone === '01613572749' ? 'admin' : 'user',
+        role: cleanedPhone === '01613572749' || cleanedPhone === '01907239952' ? 'admin' : 'user',
         darkMode: false,
         avatarUrl: '',
         loans: [],
@@ -165,18 +289,6 @@ app.post('/api/auth/login-or-register', (req, res) => {
       };
       db.users[cleanedPhone] = user;
     } else {
-      // User exists - check password if password was set
-      if (user.password) {
-        if (!password || password.trim() !== user.password.trim()) {
-          return res.status(401).json({
-            error: 'ভুল পাসওয়ার্ড! অনুগ্রহ করে সঠিক পাসওয়ার্ড দিন।'
-          });
-        }
-      } else if (password && password.trim()) {
-        user.password = password.trim();
-      }
-
-      // Update name if provided
       if (name && name.trim() && name.trim() !== user.name) {
         user.name = name.trim();
       }
@@ -187,7 +299,7 @@ app.post('/api/auth/login-or-register', (req, res) => {
 
     // Add activity log for login
     const userAgent = (req.headers['user-agent'] || 'Web Browser').toString().slice(0, 80);
-    const newLog = {
+    db.activityLogs.unshift({
       id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       userId: user.id,
       userName: user.name,
@@ -198,8 +310,7 @@ app.post('/api/auth/login-or-register', (req, res) => {
         : `${user.name} (${user.phone}) সিস্টেমে সফলভাবে লগইন করেছেন`,
       timestamp: new Date().toISOString(),
       device: userAgent,
-    };
-    db.activityLogs.unshift(newLog);
+    });
     if (db.activityLogs.length > 300) db.activityLogs = db.activityLogs.slice(0, 300);
 
     writeDatabase(db);
@@ -209,8 +320,8 @@ app.post('/api/auth/login-or-register', (req, res) => {
       success: true,
       isNew,
       user: safeUser,
-      loans: user.loans || null,
-      transactions: user.transactions || null,
+      loans: user.loans || [],
+      transactions: user.transactions || [],
     });
   } catch (err: any) {
     console.error('Auth error:', err);

@@ -33,7 +33,7 @@ interface LandingPageProps {
   currentUser: UserProfile | null;
   onOpenAuth: (mode?: 'login' | 'register') => void;
   onEnterDashboard: () => void;
-  onLoginSuccess?: (user: UserProfile) => void;
+  onLoginSuccess?: (user: UserProfile, loans?: any[], transactions?: any[]) => void;
   onLogout?: () => void;
 }
 
@@ -46,11 +46,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onLoginSuccess,
   onLogout,
 }) => {
-  // Inline quick login form state
+  // Inline quick login form state (No password)
   const [inlinePhone, setInlinePhone] = useState('');
   const [inlineName, setInlineName] = useState('');
-  const [inlinePassword, setInlinePassword] = useState('');
-  const [showInlinePassword, setShowInlinePassword] = useState(false);
   const [inlineMode, setInlineMode] = useState<'login' | 'register'>('login');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [inlineError, setInlineError] = useState('');
@@ -62,6 +60,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     return { isValid: bdRegex.test(cleaned), cleaned };
   };
 
+  const handleSelectPreset = (presetPhone: string, presetName: string) => {
+    setInlinePhone(presetPhone);
+    setInlineName(presetName);
+    setInlineError('');
+  };
+
   const handleInlineSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setInlineError('');
@@ -70,7 +74,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     if (!isValid) {
       setInlineError(
         lang === 'bn'
-          ? 'অনুগ্রহ করে সঠিক ১১ ডিজিটের বাংলাদেশী মোবাইল নম্বর দিন (যেমন: 01907239952 বা 01613572749)।'
+          ? 'অনুগ্রহ করে সঠিক ১১ ডিজিটের বাংলাদেশী মোবাইল নম্বর দিন (যেমন: 01907239952 বা 01533271817)।'
           : 'Please enter a valid 11-digit Bangladeshi mobile number.'
       );
       return;
@@ -83,22 +87,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       return;
     }
 
-    if (!inlinePassword.trim()) {
-      setInlineError(
-        lang === 'bn' ? 'অনুগ্রহ করে পাসওয়ার্ড দিন।' : 'Please enter your password.'
-      );
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
-      const res = await fetch('/api/auth/login-or-register', {
+      const endpoint = inlineMode === 'register' ? '/api/auth/register' : '/api/auth/login';
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: cleaned,
-          password: inlinePassword.trim(),
           name: inlineName.trim() || undefined,
         }),
       });
@@ -106,43 +103,86 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       const data = await res.json();
       if (res.ok && data.user) {
         if (onLoginSuccess) {
-          onLoginSuccess(data.user);
+          onLoginSuccess(data.user, data.loans, data.transactions);
         } else {
           onEnterDashboard();
         }
       } else {
-        setInlineError(data.error || (lang === 'bn' ? 'লগইন ব্যর্থ হয়েছে' : 'Login failed'));
+        if (inlineMode === 'login' && res.status === 404) {
+          setInlineError(
+            lang === 'bn'
+              ? 'এই নম্বরে কোনো অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে আপনার নাম দিয়ে নিবন্ধন করুন।'
+              : 'No account found for this number. Please register with your name.'
+          );
+          setInlineMode('register');
+        } else {
+          setInlineError(data.error || (lang === 'bn' ? 'লগইন ব্যর্থ হয়েছে' : 'Login failed'));
+        }
       }
     } catch (err: any) {
       // Local fallback in case server network has transient issue
-      if (cleaned === '01907239952' && inlinePassword === 'Allah2552') {
+      if (cleaned === '01907239952') {
         const user: UserProfile = {
           id: 'usr_01907239952',
           phone: '01907239952',
           name: 'Mostafizur Rahman',
+          role: 'admin',
+          darkMode: false,
+          createdAt: new Date().toISOString(),
+        };
+        if (onLoginSuccess) onLoginSuccess(user);
+        else onEnterDashboard();
+      } else if (cleaned === '01533271817') {
+        const user: UserProfile = {
+          id: 'usr_01533271817',
+          phone: '01533271817',
+          name: 'Harun',
           role: 'user',
           darkMode: false,
           createdAt: new Date().toISOString(),
         };
         if (onLoginSuccess) onLoginSuccess(user);
         else onEnterDashboard();
-      } else if (cleaned === '01613572749' && inlinePassword === 'Gmmostafizur331@') {
-        const admin: UserProfile = {
-          id: 'usr_admin_01613572749',
-          phone: '01613572749',
-          name: 'Admin',
-          role: 'admin',
+      } else if (cleaned === '01830026574') {
+        const user: UserProfile = {
+          id: 'usr_01830026574',
+          phone: '01830026574',
+          name: 'Sohel Apu',
+          role: 'user',
           darkMode: false,
           createdAt: new Date().toISOString(),
         };
-        if (onLoginSuccess) onLoginSuccess(admin);
+        if (onLoginSuccess) onLoginSuccess(user);
+        else onEnterDashboard();
+      } else if (cleaned === '01888141176') {
+        const user: UserProfile = {
+          id: 'usr_01888141176',
+          phone: '01888141176',
+          name: 'Musha',
+          role: 'user',
+          darkMode: false,
+          createdAt: new Date().toISOString(),
+        };
+        if (onLoginSuccess) onLoginSuccess(user);
+        else onEnterDashboard();
+      } else if (inlineMode === 'register' && inlineName.trim()) {
+        const newUser: UserProfile = {
+          id: `usr_${cleaned}_${Date.now()}`,
+          phone: cleaned,
+          name: inlineName.trim(),
+          role: 'user',
+          darkMode: false,
+          createdAt: new Date().toISOString(),
+        };
+        if (onLoginSuccess) onLoginSuccess(newUser, [], []);
         else onEnterDashboard();
       } else {
         setInlineError(
           lang === 'bn'
-            ? 'সার্ভারের সাথে সংযোগে সমস্যা হয়েছে অথবা পাসওয়ার্ড ভুল।'
-            : 'Connection error or invalid password.'
+            ? 'এই নম্বরে কোনো অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে নিবন্ধন করুন।'
+            : 'Account not found. Please register.'
         );
+        setInlineMode('register');
       }
     } finally {
       setIsSubmitting(false);
@@ -408,6 +448,71 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       </div>
                     </div>
 
+                    {/* Quick Preset Accounts Selector (One-Tap Click) */}
+                    <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-700/80">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] font-bold text-slate-300">
+                          {lang === 'bn' ? 'সংরক্ষিত অ্যাকাউন্টে এক ক্লিকে প্রবেশ:' : 'One-Tap Account Access:'}
+                        </span>
+                        <span className="text-[9px] text-pink-400 font-semibold">
+                          {lang === 'bn' ? 'পাসওয়ার্ড ছাড়া' : 'No Password'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => handleSelectPreset('01907239952', 'Mostafizur Rahman')}
+                          className="p-1.5 text-left bg-slate-800/90 border border-slate-700 hover:border-[#E2136E] rounded-lg transition-all cursor-pointer active:scale-95 group"
+                        >
+                          <div className="font-bold text-white group-hover:text-pink-400 truncate">
+                            👑 মোস্তাফিজুর
+                          </div>
+                          <div className="text-[9px] font-mono-numbers text-slate-400">
+                            01907239952
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSelectPreset('01533271817', 'Harun')}
+                          className="p-1.5 text-left bg-slate-800/90 border border-slate-700 hover:border-[#E2136E] rounded-lg transition-all cursor-pointer active:scale-95 group"
+                        >
+                          <div className="font-bold text-white group-hover:text-pink-400 truncate">
+                            👤 হারুন (Harun)
+                          </div>
+                          <div className="text-[9px] font-mono-numbers text-slate-400">
+                            01533271817
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSelectPreset('01830026574', 'Sohel Apu')}
+                          className="p-1.5 text-left bg-slate-800/90 border border-slate-700 hover:border-[#E2136E] rounded-lg transition-all cursor-pointer active:scale-95 group"
+                        >
+                          <div className="font-bold text-white group-hover:text-pink-400 truncate">
+                            👤 সোহেল আপু
+                          </div>
+                          <div className="text-[9px] font-mono-numbers text-slate-400">
+                            01830026574
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSelectPreset('01888141176', 'Musha')}
+                          className="p-1.5 text-left bg-slate-800/90 border border-slate-700 hover:border-[#E2136E] rounded-lg transition-all cursor-pointer active:scale-95 group"
+                        >
+                          <div className="font-bold text-white group-hover:text-pink-400 truncate">
+                            👤 মুসা (Musha)
+                          </div>
+                          <div className="text-[9px] font-mono-numbers text-slate-400">
+                            01888141176
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+
                     {/* Inline Form */}
                     <form onSubmit={handleInlineSubmit} className="space-y-3 text-xs">
                       {inlineError && (
@@ -418,27 +523,26 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       )}
 
                       {/* Name input (shown in register mode or optional in login) */}
-                      <div>
-                        <label className="block text-slate-300 text-[11px] font-medium mb-1 flex items-center justify-between">
-                          <span>{lang === 'bn' ? 'আপনার নাম' : 'Your Full Name'}</span>
-                          {inlineMode === 'login' && (
-                            <span className="text-slate-500 text-[10px]">{lang === 'bn' ? '(ঐচ্ছিক)' : '(Optional)'}</span>
-                          )}
-                        </label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-500">
-                            <User className="w-3.5 h-3.5" />
+                      {inlineMode === 'register' && (
+                        <div>
+                          <label className="block text-slate-300 text-[11px] font-medium mb-1 flex items-center justify-between">
+                            <span>{lang === 'bn' ? 'আপনার নাম' : 'Your Full Name'}</span>
+                          </label>
+                          <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-500">
+                              <User className="w-3.5 h-3.5" />
+                            </div>
+                            <input
+                              type="text"
+                              value={inlineName}
+                              onChange={e => setInlineName(e.target.value)}
+                              placeholder={lang === 'bn' ? 'যেমন: মোস্তাফিজুর রহমান' : 'e.g. Mostafizur Rahman'}
+                              className="w-full pl-8 pr-3 py-2 bg-slate-900/90 border border-slate-700 rounded-lg focus:outline-none focus:border-[#E2136E] text-white text-xs placeholder:text-slate-500"
+                              required
+                            />
                           </div>
-                          <input
-                            type="text"
-                            value={inlineName}
-                            onChange={e => setInlineName(e.target.value)}
-                            placeholder={lang === 'bn' ? 'যেমন: মোস্তাফিজুর রহমান' : 'e.g. Mostafizur Rahman'}
-                            className="w-full pl-8 pr-3 py-2 bg-slate-900/90 border border-slate-700 rounded-lg focus:outline-none focus:border-[#E2136E] text-white text-xs placeholder:text-slate-500"
-                            required={inlineMode === 'register'}
-                          />
                         </div>
-                      </div>
+                      )}
 
                       {/* Phone input */}
                       <div>
@@ -459,35 +563,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                           />
                         </div>
                         <p className="text-[10px] text-slate-500 mt-1">
-                          {lang === 'bn' ? 'যেকোনো ১১ ডিজিটের নম্বর (013, 014, 017, 018, 019)' : 'Any 11-digit number (013-019)'}
+                          {inlineMode === 'login'
+                            ? (lang === 'bn' ? 'শুধুমাত্র নম্বর দিন (পাসওয়ার্ড লাগবে না)' : 'Only phone number needed (No password)')
+                            : (lang === 'bn' ? 'এই নম্বরে আপনার অ্যাকাউন্ট তৈরি হবে' : 'New account will be created')}
                         </p>
-                      </div>
-
-                      {/* Password input */}
-                      <div>
-                        <label className="block text-slate-300 text-[11px] font-medium mb-1">
-                          {lang === 'bn' ? 'পাসওয়ার্ড (Password)' : 'Password'}
-                        </label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-500">
-                            <Lock className="w-3.5 h-3.5" />
-                          </div>
-                          <input
-                            type={showInlinePassword ? 'text' : 'password'}
-                            value={inlinePassword}
-                            onChange={e => setInlinePassword(e.target.value)}
-                            placeholder={lang === 'bn' ? 'গোপন পাসওয়ার্ড লিখুন' : 'Enter password'}
-                            className="w-full pl-8 pr-9 py-2 bg-slate-900/90 border border-slate-700 rounded-lg focus:outline-none focus:border-[#E2136E] text-white text-xs font-mono-numbers placeholder:text-slate-500"
-                            required
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowInlinePassword(!showInlinePassword)}
-                            className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-200 cursor-pointer"
-                          >
-                            {showInlinePassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                          </button>
-                        </div>
                       </div>
 
                       {/* Submit Button */}
@@ -503,7 +582,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                             <LogIn className="w-4 h-4" />
                             <span>
                               {inlineMode === 'login'
-                                ? (lang === 'bn' ? 'লগইন করুন ও তথ্য দেখুন' : 'Sign In & Access Data')
+                                ? (lang === 'bn' ? 'সরাসরি লগইন করুন' : 'Sign In')
                                 : (lang === 'bn' ? 'নিবন্ধন সম্পন্ন করে প্রবেশ' : 'Register & Enter')}
                             </span>
                           </>
@@ -514,10 +593,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     <div className="pt-2 border-t border-slate-700/80 flex items-center justify-between text-[11px] text-slate-400">
                       <span className="flex items-center gap-1.5 text-emerald-400">
                         <ShieldCheck className="w-3.5 h-3.5" />
-                        <span>{lang === 'bn' ? 'ডাটাবেজে সুরক্ষিত ও এনক্রিপ্টেড' : 'Database persistent & secured'}</span>
+                        <span>{lang === 'bn' ? 'ডাটাবেজে সুরক্ষিত' : 'Database persistent'}</span>
                       </span>
-                      <span className="text-[10px] text-slate-500">
-                        {lang === 'bn' ? 'পাসওয়ার্ড সুরক্ষিত' : 'Password Protected'}
+                      <span className="text-[10px] text-slate-400">
+                        {lang === 'bn' ? 'পাসওয়ার্ড মুক্ত একাউন্ট' : 'Password-Free Access'}
                       </span>
                     </div>
                   </div>

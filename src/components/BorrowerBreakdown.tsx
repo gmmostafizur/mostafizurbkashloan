@@ -25,6 +25,7 @@ interface BorrowerBreakdownProps {
   onPayLoan: (loan: LoanRecord) => void;
   onViewReceipt: (loan: LoanRecord) => void;
   onClearFilter: () => void;
+  isReadOnly?: boolean;
 }
 
 const STORAGE_KEY_PHONES = 'mostafizur_bkash_borrower_phones_v1';
@@ -36,6 +37,7 @@ export const BorrowerBreakdown: React.FC<BorrowerBreakdownProps> = ({
   onPayLoan,
   onViewReceipt,
   onClearFilter,
+  isReadOnly = false,
 }) => {
   const t = getT(lang);
 
@@ -377,12 +379,14 @@ Mostafizur bKash Loan Management`;
 
                         {!isSettled ? (
                           <>
-                            <button
-                              onClick={() => onPayLoan(loan)}
-                              className="px-2.5 py-1 text-xs font-bold text-white bg-[#E2136E] hover:bg-[#c40e5d] rounded-lg transition-all active:scale-95 shadow-2xs cursor-pointer"
-                            >
-                              {lang === 'bn' ? 'কিস্তি জমা' : 'Pay EMI'}
-                            </button>
+                            {!isReadOnly && (
+                              <button
+                                onClick={() => onPayLoan(loan)}
+                                className="px-2.5 py-1 text-xs font-bold text-white bg-[#E2136E] hover:bg-[#c40e5d] rounded-lg transition-all active:scale-95 shadow-2xs cursor-pointer"
+                              >
+                                {lang === 'bn' ? 'কিস্তি জমা' : 'Pay EMI'}
+                              </button>
+                            )}
                             {loan.lastPaymentDate && (
                               <button
                                 onClick={() => onViewReceipt(loan)}
@@ -391,6 +395,11 @@ Mostafizur bKash Loan Management`;
                               >
                                 {lang === 'bn' ? 'রশিদ' : 'Receipt'}
                               </button>
+                            )}
+                            {isReadOnly && !loan.lastPaymentDate && (
+                              <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900">
+                                {lang === 'bn' ? 'বকেয়া' : 'Due'}
+                              </span>
                             )}
                           </>
                         ) : (
