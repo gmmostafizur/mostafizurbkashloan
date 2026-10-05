@@ -3,7 +3,21 @@ import { LoanRecord, Language } from '../types/loan';
 import { getT } from '../utils/translations';
 import { getCurrentDateDDMMYYYY, bumpDateByOneMonth } from '../utils/dateUtils';
 import { parseScreenshotText, ParsedScreenshotData } from '../utils/screenshotParser';
-import { X, Save, Sparkles, FileText, CheckCircle2, ArrowRight } from 'lucide-react';
+import {
+  X,
+  Save,
+  Sparkles,
+  Calculator,
+  User,
+  Phone,
+  Calendar,
+  AlertTriangle,
+  CheckCircle2,
+  ArrowRight,
+  ShieldCheck,
+  Split,
+  Percent,
+} from 'lucide-react';
 
 interface NewLoanModalProps {
   isOpen: boolean;
@@ -11,7 +25,15 @@ interface NewLoanModalProps {
   loanToEdit?: LoanRecord | null;
   lang: Language;
   onSaveLoan: (loan: LoanRecord) => void;
+  existingBorrowers?: Array<{ name: string; phone?: string }>;
 }
+
+const PRESET_BORROWERS = [
+  { name: 'Harun', phone: '01533271817' },
+  { name: 'Sohel Apu', phone: '01830026574' },
+  { name: 'Musha', phone: '01888141176' },
+  { name: 'Mostafizur Rahman', phone: '01907239952' },
+];
 
 export const NewLoanModal: React.FC<NewLoanModalProps> = ({
   isOpen,
@@ -19,6 +41,7 @@ export const NewLoanModal: React.FC<NewLoanModalProps> = ({
   loanToEdit,
   lang,
   onSaveLoan,
+  existingBorrowers = [],
 }) => {
   const t = getT(lang);
 
@@ -26,108 +49,155 @@ export const NewLoanModal: React.FC<NewLoanModalProps> = ({
   const [screenshotText, setScreenshotText] = useState('');
   const [parseFeedback, setParseFeedback] = useState<ParsedScreenshotData | null>(null);
 
+  // Form states - Super Admin can edit every single attribute
   const [personName, setPersonName] = useState('');
+  const [borrowerPhone, setBorrowerPhone] = useState('');
   const [loanId, setLoanId] = useState('');
   const [totalPrincipal, setTotalPrincipal] = useState('');
   const [totalDue, setTotalDue] = useState('');
-  const [thirdMonthEmi, setThirdMonthEmi] = useState('');
-  const [secondMonthEmi, setSecondMonthEmi] = useState('');
   const [currentMonthEmi, setCurrentMonthEmi] = useState('');
+  const [secondMonthEmi, setSecondMonthEmi] = useState('');
+  const [thirdMonthEmi, setThirdMonthEmi] = useState('');
   const [nextDate, setNextDate] = useState('');
+  const [status, setStatus] = useState<'active' | 'overdue' | 'paid'>('active');
   const [notes, setNotes] = useState('');
-  const [tenure, setTenure] = useState<'3' | '2' | '1'>('3');
+  const [applyInterest, setApplyInterest] = useState(false);
+
+  // Combine preset borrowers with any dynamic existing borrowers
+  const allBorrowers = React.useMemo(() => {
+    const map = new Map<string, string>();
+    PRESET_BORROWERS.forEach(b => map.set(b.name.toLowerCase(), b.phone));
+    existingBorrowers.forEach(b => {
+      if (b.name) {
+        map.set(b.name.toLowerCase(), b.phone || map.get(b.name.toLowerCase()) || '');
+      }
+    });
+    return Array.from(map.entries()).map(([k, phone]) => {
+      const match = PRESET_BORROWERS.find(p => p.name.toLowerCase() === k) ||
+        existingBorrowers.find(e => e.name.toLowerCase() === k);
+      return {
+        name: match?.name || k,
+        phone: phone || '',
+      };
+    });
+  }, [existingBorrowers]);
+
+  // Split principal into 3 equal monthly EMIs
+  const splitInto3Months = (principalAmount: number, withInterest = applyInterest) => {
+    if (isNaN(principalAmount) || principalAmount <= 0) return;
+
+    const finalTotal = withInterest ? Number((principalAmount * 1.03).toFixed(2)) : principalAmount;
+    const emi1 = Number((finalTotal / 3).toFixed(2));
+    const emi2 = Number((finalTotal / 3).toFixed(2));
+    // Exact balance to avoid rounding discrepancy
+    const emi3 = Number((finalTotal - emi1 - emi2).toFixed(2));
+
+    setCurrentMonthEmi(emi1.toString());
+    setSecondMonthEmi(emi2.toString());
+    setThirdMonthEmi(emi3.toString());
+    setTotalDue(finalTotal.toString());
+  };
 
   useEffect(() => {
     if (isOpen) {
-      setEntryMode(loanToEdit ? 'form' : 'form');
+      setEntryMode('form');
       setScreenshotText('');
       setParseFeedback(null);
 
       if (loanToEdit) {
-        setPersonName(loanToEdit.personName);
-        setLoanId(loanToEdit.loanId);
-        setTotalPrincipal(loanToEdit.totalPrincipalLoan.toString());
-        setTotalDue(loanToEdit.totalDue.toString());
-        setThirdMonthEmi(loanToEdit.thirdMonthEmi.toString());
-        setSecondMonthEmi(loanToEdit.secondMonthEmi.toString());
-        setCurrentMonthEmi(loanToEdit.currentMonthEmi.toString());
-        setNextDate(loanToEdit.nextLoanSubmitDate);
+        // Editing existing loan
+        setPersonName(loanToEdit.personName || '');
+        setBorrowerPhone(loanToEdit.borrowerPhone || '');
+        setLoanId(loanToEdit.loanId || '');
+        setTotalPrincipal(loanToEdit.totalPrincipalLoan ? loanToEdit.totalPrincipalLoan.toString() : '0');
+        setTotalDue(loanToEdit.totalDue !== undefined ? loanToEdit.totalDue.toString() : '0');
+        setCurrentMonthEmi(loanToEdit.currentMonthEmi !== undefined ? loanToEdit.currentMonthEmi.toString() : '0');
+        setSecondMonthEmi(loanToEdit.secondMonthEmi !== undefined ? loanToEdit.secondMonthEmi.toString() : '0');
+        setThirdMonthEmi(loanToEdit.thirdMonthEmi !== undefined ? loanToEdit.thirdMonthEmi.toString() : '0');
+        setNextDate(loanToEdit.nextLoanSubmitDate || '');
+        setStatus(loanToEdit.status || 'active');
         setNotes(loanToEdit.notes || '');
+
+        // If borrowerPhone not set, try auto-filling from known directory
+        if (!loanToEdit.borrowerPhone && loanToEdit.personName) {
+          const matched = allBorrowers.find(b => b.name.toLowerCase() === loanToEdit.personName.toLowerCase());
+          if (matched?.phone) setBorrowerPhone(matched.phone);
+        }
       } else {
-        // Defaults for new loan
+        // Adding brand new loan: automatically divide default principal into 3 months!
+        const defaultPrincipal = 6000;
         setPersonName('');
+        setBorrowerPhone('');
         const randomLoanId = '1100000000' + Math.floor(10000000 + Math.random() * 90000000).toString();
         setLoanId(randomLoanId);
-        setTotalPrincipal('5000');
-        const due = 5000 * 1.03;
-        setTotalDue(due.toFixed(2));
-        const emi = (due / 3).toFixed(2);
-        setCurrentMonthEmi(emi);
-        setSecondMonthEmi(emi);
-        setThirdMonthEmi(emi);
+        setTotalPrincipal(defaultPrincipal.toString());
+        splitInto3Months(defaultPrincipal, false);
         setNextDate(bumpDateByOneMonth(getCurrentDateDDMMYYYY()));
-        setNotes('bKash Micro Loan');
-        setTenure('3');
+        setStatus('active');
+        setNotes('বিকাশ ৩ মাসের ক্ষুদ্রঋণ');
       }
     }
   }, [isOpen, loanToEdit]);
 
   if (!isOpen) return null;
 
-  // Auto-calculate EMIs when principal changes
+  // Handle principal change: automatically divide total principal across 3 months!
   const handlePrincipalChange = (val: string) => {
     setTotalPrincipal(val);
     const p = parseFloat(val);
     if (!isNaN(p) && p > 0) {
-      const due = Number((p * 1.03).toFixed(2));
-      setTotalDue(due.toString());
-
-      const numMonths = parseInt(tenure, 10);
-      const emi = Number((due / numMonths).toFixed(2));
-      if (numMonths === 3) {
-        setCurrentMonthEmi(emi.toString());
-        setSecondMonthEmi(emi.toString());
-        setThirdMonthEmi(emi.toString());
-      } else if (numMonths === 2) {
-        setCurrentMonthEmi(emi.toString());
-        setSecondMonthEmi(emi.toString());
-        setThirdMonthEmi('0');
-      } else {
-        setCurrentMonthEmi(due.toString());
-        setSecondMonthEmi('0');
-        setThirdMonthEmi('0');
-      }
+      splitInto3Months(p, applyInterest);
     }
   };
 
-  const handleTenureChange = (newTenure: '3' | '2' | '1') => {
-    setTenure(newTenure);
-    const due = parseFloat(totalDue) || (parseFloat(totalPrincipal) * 1.03) || 0;
-    const numMonths = parseInt(newTenure, 10);
-    const emi = Number((due / numMonths).toFixed(2));
-    if (numMonths === 3) {
-      setCurrentMonthEmi(emi.toString());
-      setSecondMonthEmi(emi.toString());
-      setThirdMonthEmi(emi.toString());
-    } else if (numMonths === 2) {
-      setCurrentMonthEmi(emi.toString());
-      setSecondMonthEmi(emi.toString());
-      setThirdMonthEmi('0');
-    } else {
-      setCurrentMonthEmi(due.toString());
-      setSecondMonthEmi('0');
-      setThirdMonthEmi('0');
+  // Toggle optional 3% interest markup
+  const handleToggleInterest = () => {
+    const nextState = !applyInterest;
+    setApplyInterest(nextState);
+    const p = parseFloat(totalPrincipal);
+    if (!isNaN(p) && p > 0) {
+      splitInto3Months(p, nextState);
     }
   };
 
-  // Handle parsing screenshot text
+  // When any EMI field changes, update total due automatically
+  const handleEmi1Change = (val: string) => {
+    setCurrentMonthEmi(val);
+    const e1 = parseFloat(val) || 0;
+    const e2 = parseFloat(secondMonthEmi) || 0;
+    const e3 = parseFloat(thirdMonthEmi) || 0;
+    setTotalDue((e1 + e2 + e3).toFixed(2));
+  };
+
+  const handleEmi2Change = (val: string) => {
+    setSecondMonthEmi(val);
+    const e1 = parseFloat(currentMonthEmi) || 0;
+    const e2 = parseFloat(val) || 0;
+    const e3 = parseFloat(thirdMonthEmi) || 0;
+    setTotalDue((e1 + e2 + e3).toFixed(2));
+  };
+
+  const handleEmi3Change = (val: string) => {
+    setThirdMonthEmi(val);
+    const e1 = parseFloat(currentMonthEmi) || 0;
+    const e2 = parseFloat(secondMonthEmi) || 0;
+    const e3 = parseFloat(val) || 0;
+    setTotalDue((e1 + e2 + e3).toFixed(2));
+  };
+
+  // Select existing borrower
+  const handleSelectBorrower = (b: { name: string; phone: string }) => {
+    setPersonName(b.name);
+    setBorrowerPhone(b.phone);
+  };
+
+  // Parse Screenshot Text
   const handleParseScreenshot = (textToParse = screenshotText) => {
     if (!textToParse.trim()) return;
 
     const data = parseScreenshotText(textToParse);
     setParseFeedback(data);
 
-    // Auto-fill form state
     setPersonName(data.personName);
     setLoanId(data.loanId);
     setTotalPrincipal(data.totalPrincipal.toString());
@@ -136,37 +206,11 @@ export const NewLoanModal: React.FC<NewLoanModalProps> = ({
     setSecondMonthEmi(data.secondMonthEmi.toString());
     setThirdMonthEmi(data.thirdMonthEmi.toString());
     setNextDate(data.nextLoanSubmitDate);
-    setTenure(data.tenure);
     setNotes(data.notes);
-  };
 
-  const sampleScreenshots = [
-    {
-      title: 'bKash Nano Loan Details Screen',
-      text: `bKash Loan Details
-Borrower: Mostafizur
-Loan ID: 110000000049281742
-Principal Amount: ৳ 7,500.00
-Outstanding Total Due: ৳ 7,725.00
-Monthly EMI: ৳ 2,575.00
-Next Repayment Date: 12/11/2026
-Tenure: 3 Months`,
-    },
-    {
-      title: 'bKash Disbursed SMS Format',
-      text: `bKash Loan: Disbursed Tk 12,000.00 to Harun. Loan ID: 110000000048194012. 1st installment Tk 4,120.00 is due on 20/11/2026. Total payable Tk 12,360.00.`,
-    },
-    {
-      title: 'বাংলা বিকাশ অ্যাপ স্ক্রিনশট',
-      text: `বিকাশ লোন বিবরণী
-ঋণগ্রহীতা: Musha
-লোন আইডি: 110000000047392185
-মূল লোন: ৳ ৪,৫০০.০০
-মোট বকেয়া: ৳ ৪,৬৩৫.০০
-পরবর্তী কিস্তির তারিখ: ১৫/১১/২০২৬
-মাসিক কিস্তি: ৳ ১,৫৪৫.০০`,
-    },
-  ];
+    const matched = allBorrowers.find(b => b.name.toLowerCase() === data.personName.toLowerCase());
+    if (matched?.phone) setBorrowerPhone(matched.phone);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -177,16 +221,18 @@ Tenure: 3 Months`,
     const emi3 = parseFloat(thirdMonthEmi) || 0;
 
     const loanRecord: LoanRecord = {
-      id: loanToEdit ? loanToEdit.id : loanId,
+      id: loanToEdit ? loanToEdit.id : loanId.trim(),
       personName: personName.trim() || 'Borrower',
+      borrowerPhone: borrowerPhone.trim() || undefined,
       loanId: loanId.trim(),
       totalPrincipalLoan: principal,
       totalDue: due,
+      originalTotalDue: loanToEdit?.originalTotalDue || due,
       currentMonthEmi: emi1,
       secondMonthEmi: emi2,
       thirdMonthEmi: emi3,
       nextLoanSubmitDate: nextDate.trim(),
-      status: due <= 0 ? 'paid' : 'active',
+      status: due <= 0 ? 'paid' : status,
       createdAt: loanToEdit ? loanToEdit.createdAt : new Date().toISOString().split('T')[0],
       notes: notes.trim(),
     };
@@ -196,64 +242,75 @@ Tenure: 3 Months`,
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-      <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden animate-in fade-in duration-150">
-        {/* Header */}
-        <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded bg-[#E2136E] flex items-center justify-center font-bold text-white text-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-xl w-full overflow-hidden animate-in fade-in duration-150 my-6 transition-colors">
+        
+        {/* Modal Header */}
+        <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-purple-950 to-slate-900 text-white flex items-center justify-between border-b border-purple-900/40">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#c40e5d] to-[#E2136E] flex items-center justify-center font-black text-white text-base shadow-sm shrink-0">
               ৳
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">
-                {loanToEdit
-                  ? (lang === 'bn' ? 'লোন তথ্য সংশোধন' : 'Edit Loan Record')
-                  : (lang === 'bn' ? 'নতুন বিকাশ লোন এন্ট্রি' : 'Add New bKash Loan')}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm sm:text-base font-bold text-white">
+                  {loanToEdit
+                    ? (lang === 'bn' ? 'সুপার অ্যাডমিন: লোন এডিট ও আপডেট' : 'Super Admin: Edit Loan')
+                    : (lang === 'bn' ? 'সুপার অ্যাডমিন: নতুন ৩ মাসের লোন যোগ' : 'Super Admin: Add 3-Month Loan')}
+                </h3>
+                <span className="text-[10px] bg-pink-500/20 text-pink-300 border border-pink-500/40 px-2 py-0.5 rounded-full font-bold">
+                  👑 Super Admin
+                </span>
+              </div>
               <p className="text-[11px] text-slate-300">
-                {lang === 'bn' ? 'ম্যানুয়াল অথবা বিকাশ স্ক্রিনশট টেক্সট থেকে দ্রুত তৈরি করুন' : 'Create manually or auto-extract from bKash screenshot/SMS'}
+                {lang === 'bn'
+                  ? 'যেকোনো ইউজারের লোন তথ্য পরিবর্তন করুন, যা সরাসরি ইউজারের অ্যাকাউন্টে সিন্ক হবে'
+                  : 'Full edit rights; changes immediately synchronize with borrower account'}
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1">
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800/80 transition-colors cursor-pointer"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Mode Switcher Tabs */}
+        {/* Mode Switcher Tabs for New Loans */}
         {!loanToEdit && (
-          <div className="px-5 pt-3 bg-slate-100/60 border-b border-slate-200 flex items-center gap-2">
+          <div className="px-5 pt-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2">
             <button
               type="button"
               onClick={() => setEntryMode('form')}
-              className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition-colors ${
+              className={`pb-2 px-3 text-xs font-bold border-b-2 transition-colors cursor-pointer ${
                 entryMode === 'form'
                   ? 'border-[#E2136E] text-[#E2136E]'
-                  : 'border-transparent text-slate-500 hover:text-slate-900'
+                  : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              {lang === 'bn' ? 'ম্যানুয়াল ফরম' : 'Manual Form'}
+              {lang === 'bn' ? 'ম্যানুয়াল ফরম (৩ মাস EMI)' : 'Manual Form (3-Month EMI)'}
             </button>
             <button
               type="button"
               onClick={() => setEntryMode('screenshot')}
-              className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 ${
+              className={`pb-2 px-3 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer ${
                 entryMode === 'screenshot'
                   ? 'border-[#E2136E] text-[#E2136E]'
-                  : 'border-transparent text-slate-500 hover:text-slate-900'
+                  : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <Sparkles className="w-3.5 h-3.5 text-[#E2136E]" />
-              <span>{lang === 'bn' ? 'স্ক্রিনশট / এসএমএস টেক্সট ইমপোর্টার' : 'Screenshot / SMS Text Importer'}</span>
+              <span>{lang === 'bn' ? 'স্ক্রিনশট / এসএমএস টেক্সট ইমপোর্টার' : 'Screenshot OCR / SMS'}</span>
             </button>
           </div>
         )}
 
         {/* SCREENSHOT TEXT IMPORTER VIEW */}
         {entryMode === 'screenshot' && !loanToEdit ? (
-          <div className="p-5 space-y-3.5 text-xs">
+          <div className="p-5 space-y-3.5 text-xs text-slate-800 dark:text-slate-200">
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">
+              <label className="block font-semibold mb-1">
                 {lang === 'bn'
                   ? 'বিকাশ লোন স্ক্রিনশট বা এসএমএস থেকে টেক্সট পেস্ট করুন:'
                   : 'Paste text from bKash loan screenshot (OCR / Lens / SMS):'}
@@ -262,45 +319,19 @@ Tenure: 3 Months`,
                 rows={4}
                 value={screenshotText}
                 onChange={(e) => setScreenshotText(e.target.value)}
-                placeholder="Paste bKash screen text here... e.g.&#10;Borrower: Mostafizur&#10;Loan ID: 110000000049281742&#10;Principal: ৳ 7,500.00&#10;Outstanding Due: ৳ 7,725.00&#10;Next Repayment Date: 12/11/2026"
-                className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-md font-mono-numbers text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#E2136E]"
+                placeholder="Paste bKash screen text here... e.g.&#10;Borrower: Harun&#10;Loan ID: 110000000049281742&#10;Principal: ৳ 7,500.00&#10;Outstanding Due: ৳ 7,500.00&#10;Next Repayment Date: 12/11/2026"
+                className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-mono-numbers text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#E2136E]"
               />
-            </div>
-
-            {/* Quick Sample Prompts */}
-            <div>
-              <span className="text-[11px] text-slate-500 block mb-1">
-                {lang === 'bn' ? 'টেস্ট করতে নমুনা টেক্সট ক্লিক করুন:' : 'Click sample bKash text to test:'}
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {sampleScreenshots.map((sample, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => {
-                      setScreenshotText(sample.text);
-                      handleParseScreenshot(sample.text);
-                    }}
-                    className="text-[11px] px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded text-slate-700 transition-colors"
-                  >
-                    {sample.title}
-                  </button>
-                ))}
-              </div>
             </div>
 
             {/* Parse Feedback Banner */}
             {parseFeedback && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-md space-y-1.5">
-                <div className="flex items-center gap-1.5 text-emerald-800 font-bold text-xs">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>
-                    {lang === 'bn'
-                      ? 'সফলভাবে লোন তথ্য সনাক্ত হয়েছে!'
-                      : 'Successfully extracted bKash loan data!'}
-                  </span>
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl space-y-1.5 text-emerald-800 dark:text-emerald-300">
+                <div className="flex items-center gap-1.5 font-bold text-xs">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>{lang === 'bn' ? 'সফলভাবে লোন তথ্য সনাক্ত হয়েছে!' : 'Successfully extracted bKash loan data!'}</span>
                 </div>
-                <div className="text-[11px] text-emerald-700 flex flex-wrap gap-x-3 gap-y-1">
+                <div className="text-[11px] flex flex-wrap gap-x-3 gap-y-1">
                   <span><strong>Name:</strong> {parseFeedback.personName}</span>
                   <span><strong>Loan ID:</strong> {parseFeedback.loanId}</span>
                   <span><strong>Principal:</strong> ৳{parseFeedback.totalPrincipal}</span>
@@ -310,13 +341,13 @@ Tenure: 3 Months`,
               </div>
             )}
 
-            <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-200">
+            <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => setEntryMode('form')}
-                className="px-3.5 py-1.5 text-xs text-slate-600 border border-slate-200 rounded-md hover:bg-slate-50"
+                className="px-3.5 py-1.5 text-xs text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
               >
-                {lang === 'bn' ? 'ফরম দেখুন' : 'Go to Form'}
+                {lang === 'bn' ? 'ফরমে ফিরে যান' : 'Go to Form'}
               </button>
               <button
                 type="button"
@@ -325,33 +356,100 @@ Tenure: 3 Months`,
                   setEntryMode('form');
                 }}
                 disabled={!screenshotText.trim()}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#E2136E] hover:bg-[#c40e5d] disabled:opacity-50 rounded-md shadow-xs transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#E2136E] hover:bg-[#c40e5d] disabled:opacity-50 rounded-xl shadow-xs transition-colors cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>{lang === 'bn' ? 'অটো-এক্সট্র্যাক্ট করে ফরমে নিন' : 'Extract & Populate Form'}</span>
+                <span>{lang === 'bn' ? 'এক্সট্র্যাক্ট করে ৩ মাসে সেটআপ করুন' : 'Extract & Setup 3-Month EMI'}</span>
                 <ArrowRight className="w-3 h-3" />
               </button>
             </div>
           </div>
         ) : (
           /* STANDARD FORM VIEW */
-          <form onSubmit={handleSubmit} className="p-5 space-y-3.5 text-xs">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  {t.colPerson} *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={personName}
-                  onChange={(e) => setPersonName(e.target.value)}
-                  placeholder="e.g. Harun / Mostafizur"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#E2136E]"
-                />
+          <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs text-slate-800 dark:text-slate-200 max-h-[75vh] overflow-y-auto">
+            
+            {/* 1. Borrower Selection & Phone Association */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-[11px] uppercase tracking-wide text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-[#E2136E]" />
+                  <span>{lang === 'bn' ? '১. ঋণগ্রহীতা ও মোবাইল নম্বর (ইউজার সিন্ক)' : '1. Borrower & Phone (Auto-Sync to User)'}</span>
+                </span>
+                <span className="text-[10px] text-pink-600 dark:text-pink-400 font-semibold">
+                  {lang === 'bn' ? 'নির্দিষ্ট অ্যাকাউন্টে ডেটা পৌঁছাবে' : 'Syncs to user account'}
+                </span>
               </div>
+
+              {/* Quick Borrower Preset Pills */}
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block mb-1">
+                  {lang === 'bn' ? 'গ্রাহক সিলেক্ট করুন:' : 'Quick Select Registered Borrower:'}
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {allBorrowers.map((b) => {
+                    const isSelected = personName.toLowerCase() === b.name.toLowerCase();
+                    return (
+                      <button
+                        key={b.name}
+                        type="button"
+                        onClick={() => handleSelectBorrower(b)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 ${
+                          isSelected
+                            ? 'bg-[#E2136E] text-white shadow-xs'
+                            : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        <span>{b.name}</span>
+                        {b.phone && (
+                          <span className={`text-[10px] font-mono-numbers ${isSelected ? 'text-white/80' : 'text-slate-400'}`}>
+                            ({b.phone.slice(-4)})
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    {t.colPerson} *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={personName}
+                    onChange={(e) => setPersonName(e.target.value)}
+                    placeholder="e.g. Harun / Sohel Apu / Musha"
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#E2136E] text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    {lang === 'bn' ? 'গ্রাহকের মোবাইল নম্বর' : 'Borrower Phone Number'} *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-2 text-slate-400 text-xs">🇧🇩</span>
+                    <input
+                      type="text"
+                      value={borrowerPhone}
+                      onChange={(e) => setBorrowerPhone(e.target.value)}
+                      placeholder="01533271817 / 01830026574"
+                      className="w-full pl-8 pr-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-mono-numbers focus:outline-none focus:ring-1 focus:ring-[#E2136E] text-slate-900 dark:text-white"
+                    />
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    {lang === 'bn' ? 'এই নম্বরের অ্যাকাউন্টে লোন তথ্য সিনক্রোনাইজ হবে' : 'Loan will be directly synced to this phone account'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Loan ID & Principal Amount (With 3-Month EMI Setup) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   {t.colLoanId} *
                 </label>
                 <input
@@ -359,15 +457,16 @@ Tenure: 3 Months`,
                   required
                   value={loanId}
                   onChange={(e) => setLoanId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-md font-mono-numbers focus:outline-none focus:ring-1 focus:ring-[#E2136E]"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-mono-numbers focus:outline-none focus:ring-1 focus:ring-[#E2136E] text-slate-900 dark:text-white"
                 />
               </div>
-            </div>
 
-            <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  {t.colPrincipal} (৳)
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                  <span>{t.colPrincipal} (৳) *</span>
+                  <span className="text-[10px] text-pink-600 font-bold">
+                    {lang === 'bn' ? '৩ মাসে অটো ভাগ হবে' : 'Auto 3-Month Split'}
+                  </span>
                 </label>
                 <input
                   type="number"
@@ -375,119 +474,187 @@ Tenure: 3 Months`,
                   required
                   value={totalPrincipal}
                   onChange={(e) => handlePrincipalChange(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-md font-mono-numbers font-bold"
+                  placeholder="e.g. 6000"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-mono-numbers font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#E2136E]"
                 />
               </div>
+            </div>
+
+            {/* 3. 3-Month EMI Calculation & Breakdown Box */}
+            <div className="p-3.5 bg-gradient-to-br from-pink-50/60 to-purple-50/60 dark:from-slate-800/80 dark:to-slate-900 border border-pink-200 dark:border-slate-700 rounded-xl space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <span className="font-bold text-[11px] uppercase tracking-wide text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <Split className="w-3.5 h-3.5 text-[#E2136E]" />
+                  <span>{lang === 'bn' ? '৩ মাসের কিস্তি হিসাব (EMI Setup)' : '3-Month Installment Setup'}</span>
+                </span>
+
+                <div className="flex items-center gap-1.5">
+                  {/* Re-calculate button */}
+                  <button
+                    type="button"
+                    onClick={() => splitInto3Months(parseFloat(totalPrincipal) || 0, false)}
+                    className="px-2.5 py-1 text-[11px] font-bold bg-white dark:bg-slate-800 border border-pink-300 dark:border-slate-700 text-pink-700 dark:text-pink-300 hover:bg-pink-50 rounded-lg shadow-2xs transition-colors cursor-pointer"
+                    title="Divide principal equally into 3 months"
+                  >
+                    {lang === 'bn' ? '৩ মাসে সমভাবে ভাগ' : 'Equal 3 Months'}
+                  </button>
+
+                  {/* Toggle 3% interest */}
+                  <button
+                    type="button"
+                    onClick={handleToggleInterest}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-colors cursor-pointer flex items-center gap-1 ${
+                      applyInterest
+                        ? 'bg-purple-600 text-white border-purple-600'
+                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+                    }`}
+                    title="Apply 3% interest to total principal"
+                  >
+                    <Percent className="w-3 h-3" />
+                    <span>{applyInterest ? (lang === 'bn' ? '+৩% যুক্ত' : '+3% Applied') : (lang === 'bn' ? '+৩% ফি' : '+3% Fee')}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 3 EMI Inputs - Super Admin can edit all 3 */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-white dark:bg-slate-800 p-2 rounded-xl border border-pink-100 dark:border-slate-700">
+                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                    {lang === 'bn' ? '১ম মাস কিস্তি (৳)' : '1st Month EMI (৳)'}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={currentMonthEmi}
+                    onChange={(e) => handleEmi1Change(e.target.value)}
+                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono-numbers text-xs font-bold text-slate-900 dark:text-white"
+                  />
+                </div>
+
+                <div className="bg-white dark:bg-slate-800 p-2 rounded-xl border border-pink-100 dark:border-slate-700">
+                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                    {lang === 'bn' ? '২য় মাস কিস্তি (৳)' : '2nd Month EMI (৳)'}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={secondMonthEmi}
+                    onChange={(e) => handleEmi2Change(e.target.value)}
+                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono-numbers text-xs font-bold text-slate-900 dark:text-white"
+                  />
+                </div>
+
+                <div className="bg-white dark:bg-slate-800 p-2 rounded-xl border border-pink-100 dark:border-slate-700">
+                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                    {lang === 'bn' ? '৩য় মাস কিস্তি (৳)' : '3rd Month EMI (৳)'}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={thirdMonthEmi}
+                    onChange={(e) => handleEmi3Change(e.target.value)}
+                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono-numbers text-xs font-bold text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Total Due display */}
+              <div className="flex items-center justify-between pt-1 text-xs">
+                <span className="text-slate-600 dark:text-slate-400 font-medium">
+                  {lang === 'bn' ? 'সর্বমোট বকেয়া (৩টি কিস্তির যোগফল):' : 'Total Due (Sum of 3 EMIs):'}
+                </span>
+                <div className="flex items-center gap-1.5 font-bold font-mono-numbers text-sm text-[#E2136E]">
+                  <span>৳</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={totalDue}
+                    onChange={(e) => setTotalDue(e.target.value)}
+                    className="w-24 px-1.5 py-0.5 bg-white dark:bg-slate-800 border border-pink-300 dark:border-pink-900 rounded font-bold text-right"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 4. Next Payment Date, Status & Notes */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  {t.colTotalDue} (৳)
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  {t.colNextDate} (MM/DD/YYYY) *
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  required
-                  value={totalDue}
-                  onChange={(e) => setTotalDue(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-md font-mono-numbers font-bold text-[#E2136E]"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    value={nextDate}
+                    onChange={(e) => setNextDate(e.target.value)}
+                    placeholder="11/15/2026"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-mono-numbers text-slate-900 dark:text-white"
+                  />
+                  <div className="flex items-center gap-1 mt-1">
+                    <button
+                      type="button"
+                      onClick={() => setNextDate(bumpDateByOneMonth(getCurrentDateDDMMYYYY()))}
+                      className="text-[10px] text-pink-600 hover:underline"
+                    >
+                      {lang === 'bn' ? '+১ মাস পর' : '+1 Month from now'}
+                    </button>
+                  </div>
+                </div>
               </div>
+
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Tenure (Months)
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  {lang === 'bn' ? 'লোন স্ট্যাটাস (Status)' : 'Loan Status'}
                 </label>
                 <select
-                  value={tenure}
-                  onChange={(e) => handleTenureChange(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-md"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as any)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium"
                 >
-                  <option value="3">3 Months (৩ মাস)</option>
-                  <option value="2">2 Months (২ মাস)</option>
-                  <option value="1">1 Month (১ মাস)</option>
+                  <option value="active">{lang === 'bn' ? 'সক্রিয় (Active - বকেয়া চলছে)' : 'Active'}</option>
+                  <option value="overdue">{lang === 'bn' ? 'মেয়াদোত্তীর্ণ (Overdue)' : 'Overdue'}</option>
+                  <option value="paid">{lang === 'bn' ? 'সম্পূর্ণ পরিশোধিত (Paid)' : 'Paid'}</option>
                 </select>
               </div>
             </div>
 
-            {/* EMI Breakdown Fields */}
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-md">
-              <span className="font-semibold text-slate-700 block mb-2 text-[11px] uppercase tracking-wide">
-                {lang === 'bn' ? 'ইএমআই বিভাজন (মাসিক কিস্তি)' : 'EMI Installment Breakdown'}
-              </span>
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="block text-[10px] text-slate-500 mb-0.5">{t.colCurrentEmi}</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={currentMonthEmi}
-                    onChange={(e) => setCurrentMonthEmi(e.target.value)}
-                    className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded font-mono-numbers text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] text-slate-500 mb-0.5">{t.colSecondEmi}</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={secondMonthEmi}
-                    onChange={(e) => setSecondMonthEmi(e.target.value)}
-                    className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded font-mono-numbers text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] text-slate-500 mb-0.5">{t.colThirdEmi}</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={thirdMonthEmi}
-                    onChange={(e) => setThirdMonthEmi(e.target.value)}
-                    className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded font-mono-numbers text-xs"
-                  />
-                </div>
-              </div>
+            {/* Notes */}
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                {lang === 'bn' ? 'মন্তব্য ও নোট (Notes)' : 'Notes / Remarks'}
+              </label>
+              <input
+                type="text"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="bKash 3-Month Nano Loan"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
+              />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  {t.colNextDate} (MM/DD/YYYY)
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={nextDate}
-                  onChange={(e) => setNextDate(e.target.value)}
-                  placeholder="10/11/2026"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-md font-mono-numbers"
-                />
-              </div>
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Notes
-                </label>
-                <input
-                  type="text"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="bKash Loan notes"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-md"
-                />
-              </div>
-            </div>
-
-            <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-200">
+            {/* Submit Action Buttons */}
+            <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-slate-200 dark:border-slate-800">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-3.5 py-1.5 text-xs text-slate-600 border border-slate-200 rounded-md hover:bg-slate-50"
+                className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 {t.cancel}
               </button>
               <button
                 type="submit"
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#E2136E] hover:bg-[#c40e5d] rounded-md shadow-xs transition-colors"
+                className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-[#c40e5d] to-[#E2136E] hover:from-[#b00b52] hover:to-[#c40e5d] rounded-xl shadow-md shadow-pink-600/30 transition-all active:scale-95 cursor-pointer"
               >
-                <Save className="w-3.5 h-3.5" />
-                <span>{lang === 'bn' ? 'সংরক্ষণ করুন' : 'Save Loan'}</span>
+                <Save className="w-4 h-4" />
+                <span>
+                  {loanToEdit
+                    ? (lang === 'bn' ? 'লোন আপডেট ও সিন্ক করুন' : 'Update & Sync Loan')
+                    : (lang === 'bn' ? 'নতুন লোন সংরক্ষণ ও সিন্ক করুন' : 'Save & Sync Loan')}
+                </span>
               </button>
             </div>
           </form>

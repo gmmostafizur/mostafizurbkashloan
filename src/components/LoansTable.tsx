@@ -24,6 +24,9 @@ import {
   RotateCcw,
   ArrowRight,
   Wallet,
+  Trash2,
+  StickyNote,
+  Save,
 } from 'lucide-react';
 
 interface LoansTableProps {
@@ -34,7 +37,9 @@ interface LoansTableProps {
   onPayLoan: (loan: LoanRecord, fullSettlement?: boolean) => void;
   onViewReceipt: (loan: LoanRecord) => void;
   onEditLoan: (loan: LoanRecord) => void;
+  onDeleteLoan?: (loanId: string) => void;
   isReadOnly?: boolean;
+  onSaveLoan?: (loan: LoanRecord) => void;
 }
 
 export const LoansTable: React.FC<LoansTableProps> = ({
@@ -45,12 +50,42 @@ export const LoansTable: React.FC<LoansTableProps> = ({
   onPayLoan,
   onViewReceipt,
   onEditLoan,
+  onDeleteLoan,
   isReadOnly = false,
+  onSaveLoan,
 }) => {
   const t = getT(lang);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'overdue' | 'due_soon' | 'paid'>('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Super Admin Note Modal & editing state
+  const [activeNoteLoan, setActiveNoteLoan] = useState<LoanRecord | null>(null);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [noteSavedFeedback, setNoteSavedFeedback] = useState(false);
+
+  const handleOpenNote = (loan: LoanRecord) => {
+    setActiveNoteLoan(loan);
+    setNoteDraft(loan.notes || '');
+    setNoteSavedFeedback(false);
+  };
+
+  const handleSaveNote = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!activeNoteLoan) return;
+    const updatedLoan: LoanRecord = {
+      ...activeNoteLoan,
+      notes: noteDraft.trim(),
+    };
+    if (onSaveLoan) {
+      onSaveLoan(updatedLoan);
+    }
+    setNoteSavedFeedback(true);
+    setTimeout(() => {
+      setActiveNoteLoan(null);
+      setNoteSavedFeedback(false);
+    }, 700);
+  };
 
   // Filter counts
   const statusCounts = useMemo(() => {
@@ -380,7 +415,7 @@ export const LoansTable: React.FC<LoansTableProps> = ({
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 self-end sm:self-center">
-            {borrowerEmiSummary.firstActiveLoan && (
+            {!isReadOnly && borrowerEmiSummary.firstActiveLoan && (
               <button
                 type="button"
                 onClick={() => onPayLoan(borrowerEmiSummary.firstActiveLoan)}
@@ -649,19 +684,26 @@ export const LoansTable: React.FC<LoansTableProps> = ({
                   >
                     {/* Borrower */}
                     <td className="py-3 px-3.5 font-medium text-slate-900 dark:text-white whitespace-nowrap">
-                      <button
-                        onClick={() => setSelectedBorrower(loan.personName)}
-                        className="hover:text-[#E2136E] hover:underline text-left cursor-pointer"
-                        title="Filter this borrower"
-                      >
-                        {loan.personName}
-                      </button>
+                      <div>
+                        <button
+                          onClick={() => setSelectedBorrower(loan.personName)}
+                          className="hover:text-[#E2136E] hover:underline text-left cursor-pointer font-bold block"
+                          title="Filter this borrower"
+                        >
+                          {loan.personName}
+                        </button>
+                        {loan.borrowerPhone && (
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono-numbers block mt-0.5">
+                            📱 {loan.borrowerPhone}
+                          </span>
+                        )}
+                      </div>
                     </td>
 
-                    {/* Loan ID with Quick Copy */}
+                    {/* Loan ID with Quick Copy and Note Option */}
                     <td className="py-3 px-3 whitespace-nowrap">
                       <div className="flex items-center gap-1.5 font-mono-numbers text-slate-700 dark:text-slate-300">
-                        <span>{loan.loanId}</span>
+                        <span className="font-semibold">{loan.loanId}</span>
                         <button
                           onClick={() => copyToClipboard(loan.loanId)}
                           className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-0.5 rounded cursor-pointer"
@@ -673,7 +715,44 @@ export const LoansTable: React.FC<LoansTableProps> = ({
                             <Copy className="w-3.5 h-3.5" />
                           )}
                         </button>
+
+                        {/* Note Option (নোট) */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenNote(loan)}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold transition-all cursor-pointer shadow-2xs active:scale-95 ${
+                            loan.notes && loan.notes.trim()
+                              ? 'bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 hover:bg-amber-200 dark:hover:bg-amber-900/80'
+                              : isReadOnly
+                              ? 'hidden'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+                          }`}
+                          title={
+                            isReadOnly
+                              ? (lang === 'bn' ? 'নোট দেখুন' : 'View Note')
+                              : (lang === 'bn' ? 'সুপার অ্যাডমিন: এই লোনের জন্য নোট লিখুন' : 'Super Admin: Write or edit note')
+                          }
+                        >
+                          <StickyNote className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                          <span>{lang === 'bn' ? 'Note' : 'Note'}</span>
+                          {loan.notes && loan.notes.trim() && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                          )}
+                        </button>
                       </div>
+
+                      {/* Display note preview below Loan ID if note exists */}
+                      {loan.notes && loan.notes.trim() && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenNote(loan)}
+                          className="mt-1 text-[10px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded px-1.5 py-0.5 max-w-[210px] truncate flex items-center gap-1 text-left cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+                          title={loan.notes}
+                        >
+                          <span className="shrink-0">📝</span>
+                          <span className="truncate">{loan.notes}</span>
+                        </button>
+                      )}
                     </td>
 
                     {/* Total Principal */}
@@ -838,13 +917,24 @@ export const LoansTable: React.FC<LoansTableProps> = ({
                           </button>
                         )}
                         {!isReadOnly && (
-                          <button
-                            onClick={() => onEditLoan(loan)}
-                            className="p-1 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-100 cursor-pointer"
-                            title="Edit details"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => onEditLoan(loan)}
+                              className="p-1.5 text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition-colors cursor-pointer"
+                              title={lang === 'bn' ? 'সুপার অ্যাডমিন: লোন সম্পূর্ণ সংশোধন করুন' : 'Super Admin: Edit Full Loan Details'}
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            {onDeleteLoan && (
+                              <button
+                                onClick={() => onDeleteLoan(loan.loanId)}
+                                className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                                title={lang === 'bn' ? 'সুপার অ্যাডমিন: লোন ডিলিট করুন' : 'Super Admin: Delete Loan'}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
                     </td>
@@ -879,6 +969,178 @@ export const LoansTable: React.FC<LoansTableProps> = ({
             : 'Payment automatically updates schedule and recalculates remaining EMIs'}
         </div>
       </div>
+
+      {/* ========================================================
+          LOAN NOTE MODAL / DIALOG
+          Super Admin can write, edit, and save notes for this loan.
+          Regular user can view the note in read-only mode.
+          ======================================================== */}
+      {activeNoteLoan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-150 text-slate-900 dark:text-slate-100 transition-colors">
+            {/* Header */}
+            <div className="px-5 py-4 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 text-white flex items-center justify-between shadow-md">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur-xs flex items-center justify-center">
+                  <StickyNote className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold tracking-tight">
+                    {lang === 'bn' ? 'লোন আইডি নোট' : 'Loan ID Note'}
+                  </h3>
+                  <p className="text-[11px] text-amber-100 font-mono-numbers">
+                    {activeNoteLoan.personName} · ID: {activeNoteLoan.loanId}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveNoteLoan(null)}
+                className="text-white/80 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-5 space-y-4">
+              {/* Loan Brief Card */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
+                <div>
+                  <span className="text-[10px] text-slate-400 block">{lang === 'bn' ? 'ঋণগ্রহীতা' : 'Borrower'}</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{activeNoteLoan.personName}</span>
+                  {activeNoteLoan.borrowerPhone && (
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono-numbers block">📱 {activeNoteLoan.borrowerPhone}</span>
+                  )}
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-slate-400 block">{lang === 'bn' ? 'বর্তমান বকেয়া' : 'Total Due'}</span>
+                  <span className="font-bold text-[#E2136E] font-mono-numbers">{formatCurrency(activeNoteLoan.totalDue, lang)}</span>
+                </div>
+              </div>
+
+              {!isReadOnly ? (
+                /* Super Admin Edit View */
+                <form onSubmit={handleSaveNote} className="space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <span>{lang === 'bn' ? 'সুপার অ্যাডমিন নোট লিখুন:' : 'Write Super Admin Note:'}</span>
+                      </label>
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+                        {lang === 'bn' ? 'ইউজার অ্যাকাউন্টে অটো-সিঙ্ক হবে' : 'Auto-syncs to borrower account'}
+                      </span>
+                    </div>
+                    <textarea
+                      value={noteDraft}
+                      onChange={(e) => setNoteDraft(e.target.value)}
+                      placeholder={
+                        lang === 'bn'
+                          ? 'এই লোন আইডির জন্য প্রয়োজনীয় নোট লিখুন (যেমন: কিস্তি পরিশোধের তাগাদা, বিকাশ লেনদেন ট্র্যাকিং, বিশেষ নির্দেশনা ইত্যাদি)...'
+                          : 'Write internal admin notes, payment reminders, or verification details for this loan...'
+                      }
+                      rows={4}
+                      className="w-full p-3 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 resize-none"
+                    />
+                  </div>
+
+                  {/* Quick Preset Suggestion Tags */}
+                  <div>
+                    <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1.5">
+                      {lang === 'bn' ? 'এক ক্লিকে নোট যোগ করুন:' : 'Quick Note Presets:'}
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        lang === 'bn' ? '✅ বিকাশ লেনদেন যাচাইকৃত' : 'bKash Verified',
+                        lang === 'bn' ? '📞 কিস্তি তাগাদা দেওয়া হয়েছে' : 'Reminder Call Sent',
+                        lang === 'bn' ? '📅 আগামী সপ্তাহে পরিশোধ করবে' : 'Promise to pay next week',
+                        lang === 'bn' ? '⚠️ বকেয়া কিস্তি সংক্রান্ত সতর্কতা' : 'Overdue Warning',
+                        lang === 'bn' ? '⭐ নিয়মিত ও বিশ্বস্ত গ্রাহক' : 'Trusted Good Borrower',
+                      ].map((presetText) => (
+                        <button
+                          key={presetText}
+                          type="button"
+                          onClick={() => {
+                            setNoteDraft(prev => (prev ? `${prev} · ${presetText}` : presetText));
+                          }}
+                          className="px-2 py-1 text-[11px] font-medium bg-slate-100 dark:bg-slate-800 hover:bg-amber-100 dark:hover:bg-amber-950/80 text-slate-700 dark:text-slate-300 hover:text-amber-900 dark:hover:text-amber-200 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
+                        >
+                          + {presetText}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setNoteDraft('')}
+                      className="px-3 py-1.5 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer font-medium"
+                    >
+                      {lang === 'bn' ? 'নোট মুছুন' : 'Clear'}
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setActiveNoteLoan(null)}
+                        className="px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                      >
+                        {lang === 'bn' ? 'বাতিল' : 'Cancel'}
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-500/20 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                      >
+                        {noteSavedFeedback ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>{lang === 'bn' ? 'সংরক্ষিত হয়েছে!' : 'Saved!'}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-3.5 h-3.5" />
+                            <span>{lang === 'bn' ? 'নোট সংরক্ষণ করুন' : 'Save Note'}</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              ) : (
+                /* Regular User View-Only View */
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                      {lang === 'bn' ? 'সুপার অ্যাডমিন নোট:' : 'Admin Note:'}
+                    </label>
+                    <div className="p-3.5 bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl text-xs text-amber-900 dark:text-amber-200 leading-relaxed font-sans">
+                      {activeNoteLoan.notes && activeNoteLoan.notes.trim() ? (
+                        activeNoteLoan.notes
+                      ) : (
+                        <span className="italic text-slate-400">
+                          {lang === 'bn' ? 'এই লোনের জন্য কোনো বিশেষ নোট নেই।' : 'No note has been added for this loan yet.'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <button
+                      type="button"
+                      onClick={() => setActiveNoteLoan(null)}
+                      className="px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      {lang === 'bn' ? 'বন্ধ করুন' : 'Close'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

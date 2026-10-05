@@ -387,7 +387,7 @@ app.post('/api/user/settings', (req, res) => {
   }
 });
 
-// 4. Sync User Loan Data to Persistent Database
+// 4. Sync User Loan Data to Persistent Database (Instant cross-user synchronization)
 app.post('/api/user/sync-loans', (req, res) => {
   try {
     const { phone, loans, transactions } = req.body;
@@ -395,18 +395,114 @@ app.post('/api/user/sync-loans', (req, res) => {
 
     const cleanedPhone = phone.replace(/[\s\-\+]/g, '').replace(/^88/, '');
     const db = readDatabase();
+    if (!db.users) db.users = {};
 
-    if (!db.users || !db.users[cleanedPhone]) {
+    if (!db.users[cleanedPhone]) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    db.users[cleanedPhone].loans = loans;
-    db.users[cleanedPhone].transactions = transactions;
+    db.users[cleanedPhone].loans = loans || [];
+    db.users[cleanedPhone].transactions = transactions || [];
     db.users[cleanedPhone].lastSyncAt = new Date().toISOString();
 
+    const isSuperAdmin = cleanedPhone === '01907239952' || cleanedPhone === '01613572749' || db.users[cleanedPhone]?.role === 'admin';
+
+    // If Super Admin is updating loans, instantly distribute and synchronize
+    // each borrower's respective loans & transactions into their own individual user account!
+    if (isSuperAdmin && Array.isArray(loans)) {
+      // 1. Build a name-to-phone directory of all known users
+      const nameToPhone: { [normalizedName: string]: string } = {
+        'mostafizur': '01907239952',
+        'mostafizur rahman': '01907239952',
+        'harun': '01533271817',
+        'sohel apu': '01830026574',
+        'musha': '01888141176',
+      };
+
+      for (const [uPhone, uObj] of Object.entries<any>(db.users)) {
+        if (uObj?.name && typeof uObj.name === 'string') {
+          nameToPhone[uObj.name.trim().toLowerCase()] = uPhone;
+        }
+      }
+
+      // 2. Group loans by borrower phone
+      const loansByUserPhone: { [uPhone: string]: any[] } = {};
+      const txByUserPhone: { [uPhone: string]: any[] } = {};
+
+      // Initialize empty arrays for all registered users so if all loans are paid/deleted, it reflects
+      for (const uPhone of Object.keys(db.users)) {
+        if (uPhone !== cleanedPhone) {
+          loansByUserPhone[uPhone] = [];
+          txByUserPhone[uPhone] = [];
+        }
+      }
+
+      for (const loan of loans) {
+        let targetPhone = loan.borrowerPhone ? loan.borrowerPhone.replace(/[\s\-\+]/g, '').replace(/^88/, '') : '';
+        if (!targetPhone && loan.personName) {
+          const normName = loan.personName.trim().toLowerCase();
+          targetPhone = nameToPhone[normName] || '';
+          if (!targetPhone) {
+            for (const [knownName, phoneVal] of Object.entries(nameToPhone)) {
+              if (normName.includes(knownName) || knownName.includes(normName)) {
+                targetPhone = phoneVal;
+                break;
+              }
+            }
+          }
+        }
+
+        if (targetPhone && targetPhone !== cleanedPhone) {
+          if (!loansByUserPhone[targetPhone]) loansByUserPhone[targetPhone] = [];
+          loansByUserPhone[targetPhone].push(loan);
+        }
+      }
+
+      // Group transactions similarly
+      if (Array.isArray(transactions)) {
+        for (const tx of transactions) {
+          let targetPhone = tx.borrowerPhone ? tx.borrowerPhone.replace(/[\s\-\+]/g, '').replace(/^88/, '') : '';
+          if (!targetPhone && tx.personName) {
+            const normName = tx.personName.trim().toLowerCase();
+            targetPhone = nameToPhone[normName] || '';
+            if (!targetPhone) {
+              for (const [knownName, phoneVal] of Object.entries(nameToPhone)) {
+                if (normName.includes(knownName) || knownName.includes(normName)) {
+                  targetPhone = phoneVal;
+                  break;
+                }
+              }
+            }
+          }
+
+          if (targetPhone && targetPhone !== cleanedPhone) {
+            if (!txByUserPhone[targetPhone]) txByUserPhone[targetPhone] = [];
+            txByUserPhone[targetPhone].push(tx);
+          }
+        }
+      }
+
+      // 3. Write each user's loans and transactions into db.users
+      for (const [targetPhone, userLoans] of Object.entries(loansByUserPhone)) {
+        if (db.users[targetPhone]) {
+          db.users[targetPhone].loans = userLoans;
+          if (txByUserPhone[targetPhone]) {
+            db.users[targetPhone].transactions = txByUserPhone[targetPhone];
+          }
+          db.users[targetPhone].lastSyncAt = new Date().toISOString();
+          db.users[targetPhone].updatedAt = new Date().toISOString();
+        }
+      }
+    }
+
     writeDatabase(db);
-    return res.json({ success: true, lastSyncAt: db.users[cleanedPhone].lastSyncAt });
-  } catch (err) {
+    return res.json({
+      success: true,
+      lastSyncAt: db.users[cleanedPhone].lastSyncAt,
+      message: isSuperAdmin ? 'Master loans synced across all borrower accounts' : 'User loans synced successfully'
+    });
+  } catch (err: any) {
+    console.error('Error syncing loans:', err);
     res.status(500).json({ error: 'Failed to sync loans' });
   }
 });

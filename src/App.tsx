@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { LoanRecord, PaymentTransaction, Language } from './types/loan';
 import {
   INITIAL_LOANS,
@@ -229,6 +229,62 @@ export default function App() {
     }
   }, [loans, transactions, currentUser?.phone]);
 
+  // For regular users: auto-sync in real time from backend database so any Super Admin changes reflect instantly
+  useEffect(() => {
+    if (!currentUser?.phone || isAdmin) return;
+
+    let isMounted = true;
+    const fetchLatestUserLoans = async () => {
+      try {
+        const res = await fetch(`/api/user/${currentUser.phone}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (isMounted && data?.success && data?.user) {
+          if (Array.isArray(data.user.loans)) {
+            setLoans(data.user.loans);
+            try {
+              localStorage.setItem(`user_loans_${currentUser.phone}`, JSON.stringify(data.user.loans));
+            } catch (e) {}
+          }
+          if (Array.isArray(data.user.transactions)) {
+            setTransactions(data.user.transactions);
+            try {
+              localStorage.setItem(`user_tx_${currentUser.phone}`, JSON.stringify(data.user.transactions));
+            } catch (e) {}
+          }
+        }
+      } catch (err) {
+        // quiet fallback
+      }
+    };
+
+    // Polling interval: every 4 seconds and whenever tab/window gets focus
+    const interval = setInterval(fetchLatestUserLoans, 4000);
+    window.addEventListener('focus', fetchLatestUserLoans);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener('focus', fetchLatestUserLoans);
+    };
+  }, [currentUser?.phone, isAdmin]);
+
+  // Dynamic directory of existing borrowers for Super Admin loan assignment
+  const existingBorrowers = useMemo(() => {
+    const list: Array<{ name: string; phone?: string }> = [
+      { name: 'Harun', phone: '01533271817' },
+      { name: 'Sohel Apu', phone: '01830026574' },
+      { name: 'Musha', phone: '01888141176' },
+      { name: 'Mostafizur Rahman', phone: '01907239952' },
+    ];
+    loans.forEach(l => {
+      if (l.personName && !list.some(b => b.name.toLowerCase() === l.personName.toLowerCase())) {
+        list.push({ name: l.personName, phone: l.borrowerPhone });
+      }
+    });
+    return list;
+  }, [loans]);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 4000);
@@ -267,6 +323,10 @@ export default function App() {
     referenceId: string,
     note: string
   ) => {
+    if (isReadOnly) {
+      showToast(lang === 'bn' ? 'ব্যবহারকারী পেমেন্ট করতে পারবেন না। শুধুমাত্র লোনের তথ্য দেখার অনুমতি রয়েছে।' : 'Users cannot make payments. View-only access.');
+      return;
+    }
     const loanIndex = loans.findIndex(l => l.loanId === loanId);
     if (loanIndex === -1) return;
 
@@ -372,6 +432,10 @@ export default function App() {
 
   // Open Payment Modal for specific loan
   const handlePayLoan = (loan: LoanRecord, fullSettlement = false) => {
+    if (isReadOnly) {
+      showToast(lang === 'bn' ? 'ব্যবহারকারী পেমেন্ট করতে পারবেন না। শুধুমাত্র লোনের তথ্য দেখার অনুমতি রয়েছে।' : 'Users cannot make payments. View-only access.');
+      return;
+    }
     setPaymentTargetLoan(loan);
     setPaymentInitialAmount(fullSettlement ? loan.totalDue : loan.currentMonthEmi);
     setPaymentInitialNote(
@@ -414,6 +478,19 @@ export default function App() {
   const handleEditLoan = (loan: LoanRecord) => {
     setLoanToEdit(loan);
     setIsNewLoanModalOpen(true);
+  };
+
+  // Delete loan (Super Admin full authority)
+  const handleDeleteLoan = (loanId: string) => {
+    if (window.confirm(lang === 'bn' ? 'সুপার অ্যাডমিন: আপনি কি নিশ্চিত যে এই লোন রেকর্ডটি সম্পূর্ণ মুছে ফেলতে চান? এটি সংশ্লিষ্ট ইউজারের অ্যাকাউন্ট থেকেও মুছে যাবে।' : 'Super Admin: Permanently delete this loan record? It will be removed from the borrower account as well.')) {
+      const target = loans.find(l => l.loanId === loanId);
+      const filtered = loans.filter(l => l.loanId !== loanId);
+      setLoans(filtered);
+      showToast(lang === 'bn' ? 'লোন সফলভাবে মুছে ফেলা হয়েছে এবং সংশ্লিষ্ট ইউজারের অ্যাকাউন্টে সিন্ক হয়েছে' : 'Loan deleted successfully & synced across accounts');
+      if (target) {
+        recordActivity('DELETE_LOAN', `${target.personName}-এর লোন (${loanId}) মুছে ফেলা হয়েছে`, { loanId, person: target.personName });
+      }
+    }
   };
 
   // Open New Loan Modal pre-filled from attached screenshot
@@ -791,7 +868,9 @@ export default function App() {
                 onPayLoan={handlePayLoan}
                 onViewReceipt={handleViewReceiptForLoan}
                 onEditLoan={handleEditLoan}
+                onDeleteLoan={isAdmin ? handleDeleteLoan : undefined}
                 isReadOnly={isReadOnly}
+                onSaveLoan={handleSaveLoan}
               />
             </div>
           </div>
@@ -867,7 +946,9 @@ export default function App() {
               onPayLoan={handlePayLoan}
               onViewReceipt={handleViewReceiptForLoan}
               onEditLoan={handleEditLoan}
+              onDeleteLoan={isAdmin ? handleDeleteLoan : undefined}
               isReadOnly={isReadOnly}
+              onSaveLoan={handleSaveLoan}
             />
           </div>
         )}
@@ -969,6 +1050,7 @@ export default function App() {
         loanToEdit={loanToEdit}
         lang={lang}
         onSaveLoan={handleSaveLoan}
+        existingBorrowers={existingBorrowers}
       />
 
       <MonthlyRolloverModal

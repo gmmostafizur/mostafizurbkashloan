@@ -45,12 +45,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     return { isValid: bdRegex.test(cleaned), cleaned };
   };
 
-  const handleSelectPreset = (presetPhone: string, presetName: string) => {
-    setPhone(presetPhone);
-    setName(presetName);
-    setErrorMessage('');
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
@@ -206,75 +200,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <UserPlus className="w-3.5 h-3.5" />
               <span>{lang === 'bn' ? 'নতুন নিবন্ধন' : 'Register'}</span>
             </button>
-          </div>
-
-          {/* Quick Preset Accounts Selector (One-Tap Click) */}
-          <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                {lang === 'bn' ? 'এক ক্লিকে সংরক্ষিত অ্যাকাউন্টে প্রবেশ:' : 'Quick One-Tap Account Access:'}
-              </span>
-              <span className="text-[10px] text-[#E2136E] font-semibold">
-                {lang === 'bn' ? 'পাসওয়ার্ড মুক্ত' : 'No Password'}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-1.5 text-xs">
-              <button
-                type="button"
-                onClick={() => handleSelectPreset('01907239952', 'Mostafizur Rahman')}
-                className="p-2 text-left bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-[#E2136E] rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95 group"
-              >
-                <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white group-hover:text-[#E2136E] text-xs">
-                  <span>👑</span>
-                  <span className="truncate">মোস্তাফিজুর রহমান</span>
-                </div>
-                <div className="text-[10px] font-mono-numbers text-slate-500 dark:text-slate-400 mt-0.5">
-                  01907239952
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSelectPreset('01533271817', 'Harun')}
-                className="p-2 text-left bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-[#E2136E] rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95 group"
-              >
-                <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white group-hover:text-[#E2136E] text-xs">
-                  <span>👤</span>
-                  <span className="truncate">হারুন (Harun)</span>
-                </div>
-                <div className="text-[10px] font-mono-numbers text-slate-500 dark:text-slate-400 mt-0.5">
-                  01533271817
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSelectPreset('01830026574', 'Sohel Apu')}
-                className="p-2 text-left bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-[#E2136E] rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95 group"
-              >
-                <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white group-hover:text-[#E2136E] text-xs">
-                  <span>👤</span>
-                  <span className="truncate">সোহেল আপু (Sohel Apu)</span>
-                </div>
-                <div className="text-[10px] font-mono-numbers text-slate-500 dark:text-slate-400 mt-0.5">
-                  01830026574
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSelectPreset('01888141176', 'Musha')}
-                className="p-2 text-left bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-[#E2136E] rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95 group"
-              >
-                <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white group-hover:text-[#E2136E] text-xs">
-                  <span>👤</span>
-                  <span className="truncate">মুসা (Musha)</span>
-                </div>
-                <div className="text-[10px] font-mono-numbers text-slate-500 dark:text-slate-400 mt-0.5">
-                  01888141176
-                </div>
-              </button>
-            </div>
           </div>
 
           {/* Form */}

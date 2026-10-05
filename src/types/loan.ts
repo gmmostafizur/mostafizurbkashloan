@@ -1,6 +1,7 @@
 export interface LoanRecord {
   id: string;
   personName: string;
+  borrowerPhone?: string;
   loanId: string;
   thirdMonthEmi: number;
   secondMonthEmi: number;
@@ -19,6 +20,7 @@ export interface PaymentTransaction {
   id: string;
   loanId: string;
   personName: string;
+  borrowerPhone?: string;
   amount: number;
   paymentDate: string; // DD/MM/YYYY
   timestamp: string; // ISO

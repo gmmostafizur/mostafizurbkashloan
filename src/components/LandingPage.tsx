@@ -60,12 +60,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     return { isValid: bdRegex.test(cleaned), cleaned };
   };
 
-  const handleSelectPreset = (presetPhone: string, presetName: string) => {
-    setInlinePhone(presetPhone);
-    setInlineName(presetName);
-    setInlineError('');
-  };
-
   const handleInlineSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setInlineError('');
@@ -444,71 +438,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                           }`}
                         >
                           {lang === 'bn' ? 'নিবন্ধন' : 'Register'}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Quick Preset Accounts Selector (One-Tap Click) */}
-                    <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-700/80">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[10px] font-bold text-slate-300">
-                          {lang === 'bn' ? 'সংরক্ষিত অ্যাকাউন্টে এক ক্লিকে প্রবেশ:' : 'One-Tap Account Access:'}
-                        </span>
-                        <span className="text-[9px] text-pink-400 font-semibold">
-                          {lang === 'bn' ? 'পাসওয়ার্ড ছাড়া' : 'No Password'}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-1 text-[11px]">
-                        <button
-                          type="button"
-                          onClick={() => handleSelectPreset('01907239952', 'Mostafizur Rahman')}
-                          className="p-1.5 text-left bg-slate-800/90 border border-slate-700 hover:border-[#E2136E] rounded-lg transition-all cursor-pointer active:scale-95 group"
-                        >
-                          <div className="font-bold text-white group-hover:text-pink-400 truncate">
-                            👑 মোস্তাফিজুর
-                          </div>
-                          <div className="text-[9px] font-mono-numbers text-slate-400">
-                            01907239952
-                          </div>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleSelectPreset('01533271817', 'Harun')}
-                          className="p-1.5 text-left bg-slate-800/90 border border-slate-700 hover:border-[#E2136E] rounded-lg transition-all cursor-pointer active:scale-95 group"
-                        >
-                          <div className="font-bold text-white group-hover:text-pink-400 truncate">
-                            👤 হারুন (Harun)
-                          </div>
-                          <div className="text-[9px] font-mono-numbers text-slate-400">
-                            01533271817
-                          </div>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleSelectPreset('01830026574', 'Sohel Apu')}
-                          className="p-1.5 text-left bg-slate-800/90 border border-slate-700 hover:border-[#E2136E] rounded-lg transition-all cursor-pointer active:scale-95 group"
-                        >
-                          <div className="font-bold text-white group-hover:text-pink-400 truncate">
-                            👤 সোহেল আপু
-                          </div>
-                          <div className="text-[9px] font-mono-numbers text-slate-400">
-                            01830026574
-                          </div>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleSelectPreset('01888141176', 'Musha')}
-                          className="p-1.5 text-left bg-slate-800/90 border border-slate-700 hover:border-[#E2136E] rounded-lg transition-all cursor-pointer active:scale-95 group"
-                        >
-                          <div className="font-bold text-white group-hover:text-pink-400 truncate">
-                            👤 মুসা (Musha)
-                          </div>
-                          <div className="text-[9px] font-mono-numbers text-slate-400">
-                            01888141176
-                          </div>
                         </button>
                       </div>
                     </div>
