@@ -2,6 +2,7 @@ export interface LoanRecord {
   id: string;
   personName: string;
   borrowerPhone?: string;
+  borrowerUserId?: string;
   loanId: string;
   thirdMonthEmi: number;
   secondMonthEmi: number;

@@ -40,6 +40,7 @@ interface LoansTableProps {
   onDeleteLoan?: (loanId: string) => void;
   isReadOnly?: boolean;
   onSaveLoan?: (loan: LoanRecord) => void;
+  onSaveAndSync?: () => void;
 }
 
 export const LoansTable: React.FC<LoansTableProps> = ({
@@ -53,6 +54,7 @@ export const LoansTable: React.FC<LoansTableProps> = ({
   onDeleteLoan,
   isReadOnly = false,
   onSaveLoan,
+  onSaveAndSync,
 }) => {
   const t = getT(lang);
   const [searchQuery, setSearchQuery] = useState('');
@@ -330,8 +332,19 @@ export const LoansTable: React.FC<LoansTableProps> = ({
           )}
         </div>
 
-        {/* Export Buttons */}
+        {/* Export & Save/Sync Buttons */}
         <div className="flex items-center gap-1.5 self-end lg:self-center">
+          {!isReadOnly && onSaveAndSync && (
+            <button
+              type="button"
+              onClick={onSaveAndSync}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 rounded-md transition-all shadow-sm shadow-emerald-600/30 active:scale-95 cursor-pointer whitespace-nowrap border border-emerald-500/80"
+              title={lang === 'bn' ? 'সুপার অ্যাডমিন: ডাটাবেজে সেভ করুন এবং সকল ইউজারের অ্যাকাউন্টে রিয়েল-টাইমে সিঙ্ক করুন' : 'Save & real-time sync all loans to user accounts'}
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>{lang === 'bn' ? 'সেভ ও ইউজার সিঙ্ক' : 'Save & Sync to Users'}</span>
+            </button>
+          )}
           <button
             onClick={() => exportLoansToCSV(filteredLoans, lang)}
             className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 rounded-md transition-colors shadow-2xs whitespace-nowrap"
@@ -1004,18 +1017,20 @@ export const LoansTable: React.FC<LoansTableProps> = ({
 
             {/* Content */}
             <div className="p-5 space-y-4">
-              {/* Loan Brief Card */}
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
+              {/* Loan Brief Card with Target User ID */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                 <div>
                   <span className="text-[10px] text-slate-400 block">{lang === 'bn' ? 'ঋণগ্রহীতা' : 'Borrower'}</span>
                   <span className="font-bold text-slate-800 dark:text-slate-200">{activeNoteLoan.personName}</span>
                   {activeNoteLoan.borrowerPhone && (
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono-numbers block">📱 {activeNoteLoan.borrowerPhone}</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono-numbers block mt-0.5">📱 {activeNoteLoan.borrowerPhone}</span>
                   )}
                 </div>
-                <div className="text-right">
-                  <span className="text-[10px] text-slate-400 block">{lang === 'bn' ? 'বর্তমান বকেয়া' : 'Total Due'}</span>
-                  <span className="font-bold text-[#E2136E] font-mono-numbers">{formatCurrency(activeNoteLoan.totalDue, lang)}</span>
+                <div className="sm:text-right">
+                  <span className="text-[10px] text-slate-400 block">{lang === 'bn' ? 'টার্গেট ইউজার আইডি' : 'Target User ID'}</span>
+                  <code className="text-[11px] font-mono font-bold bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 inline-block">
+                    usr_{activeNoteLoan.borrowerPhone ? activeNoteLoan.borrowerPhone.replace(/[\s\-\+]/g, '').replace(/^88/, '') : activeNoteLoan.personName.toLowerCase().replace(/\s+/g, '_')}
+                  </code>
                 </div>
               </div>
 
@@ -1091,17 +1106,17 @@ export const LoansTable: React.FC<LoansTableProps> = ({
                       </button>
                       <button
                         type="submit"
-                        className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-500/20 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                        className="px-4 py-2 bg-gradient-to-r from-emerald-600 via-teal-600 to-amber-600 hover:from-emerald-700 hover:to-amber-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-500/20 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                       >
                         {noteSavedFeedback ? (
                           <>
                             <Check className="w-3.5 h-3.5" />
-                            <span>{lang === 'bn' ? 'সংরক্ষিত হয়েছে!' : 'Saved!'}</span>
+                            <span>{lang === 'bn' ? 'ইউজারের আইডিতে সিঙ্ক হয়েছে!' : 'Synced to User ID!'}</span>
                           </>
                         ) : (
                           <>
                             <Save className="w-3.5 h-3.5" />
-                            <span>{lang === 'bn' ? 'নোট সংরক্ষণ করুন' : 'Save Note'}</span>
+                            <span>{lang === 'bn' ? '💾 নোট সেভ ও ইউজারের আইডিতে সিঙ্ক' : '💾 Save & Sync to User ID'}</span>
                           </>
                         )}
                       </button>

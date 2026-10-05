@@ -37,16 +37,18 @@ function initDatabase() {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
-    let db: any = { users: {}, activityLogs: [] };
+    let db: any = { users: {}, activityLogs: [], masterLoans: [], masterTransactions: [] };
     if (fs.existsSync(DB_FILE)) {
       try {
         db = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
       } catch (e) {
-        db = { users: {}, activityLogs: [] };
+        db = { users: {}, activityLogs: [], masterLoans: [], masterTransactions: [] };
       }
     }
     if (!db.users) db.users = {};
     if (!db.activityLogs) db.activityLogs = [];
+    if (!db.masterLoans) db.masterLoans = [];
+    if (!db.masterTransactions) db.masterTransactions = [];
 
     // Seed preset accounts: Mostafizur Rahman (01907239952), Harun (01533271817), Sohel Apu (01830026574), Musha (01888141176), Admin (01613572749)
     const presetAccounts = getPresetAccounts();
@@ -59,8 +61,8 @@ function initDatabase() {
           role: preset.role,
           darkMode: false,
           avatarUrl: '',
-          loans: preset.loans,
-          transactions: preset.transactions,
+          loans: preset.loans || [],
+          transactions: preset.transactions || [],
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           lastLoginAt: new Date().toISOString(),
@@ -70,13 +72,21 @@ function initDatabase() {
         db.users[preset.phone].name = preset.name;
         db.users[preset.phone].role = preset.role;
         if (!db.users[preset.phone].loans || db.users[preset.phone].loans.length === 0) {
-          db.users[preset.phone].loans = preset.loans;
+          db.users[preset.phone].loans = preset.loans || [];
         }
         if (!db.users[preset.phone].transactions || db.users[preset.phone].transactions.length === 0) {
-          db.users[preset.phone].transactions = preset.transactions;
+          db.users[preset.phone].transactions = preset.transactions || [];
         }
         // Remove password requirement from existing accounts
         delete db.users[preset.phone].password;
+      }
+    }
+
+    // Populate masterLoans if not present
+    if (!Array.isArray(db.masterLoans) || db.masterLoans.length === 0) {
+      const adminAcc = db.users['01907239952'] || presetAccounts.find((p: any) => p.phone === '01907239952');
+      if (adminAcc?.loans?.length > 0) {
+        db.masterLoans = JSON.parse(JSON.stringify(adminAcc.loans));
       }
     }
 
@@ -84,6 +94,9 @@ function initDatabase() {
     for (const phoneKey of Object.keys(db.users)) {
       delete db.users[phoneKey].password;
     }
+
+    // Real-time distribute master loans to individual borrower accounts
+    distributeMasterLoansToUsers(db);
 
     // Initial demo log if empty
     if (db.activityLogs.length === 0) {
@@ -102,6 +115,163 @@ function initDatabase() {
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
   } catch (err) {
     console.error('Database initialization error:', err);
+  }
+}
+
+// Clean and normalize Bangladeshi phone number
+function cleanPhone(phone?: string): string {
+  if (!phone || typeof phone !== 'string') return '';
+  let cleaned = phone.replace(/[\s\-\+]/g, '').replace(/^88/, '');
+  if (cleaned.length === 10 && cleaned.startsWith('1')) {
+    cleaned = '0' + cleaned;
+  }
+  return cleaned;
+}
+
+// Master loan distribution logic: instantly maps and propagates loans to each user's account in real-time
+function distributeMasterLoansToUsers(db: any) {
+  if (!db) return;
+  if (!db.users) db.users = {};
+  if (!Array.isArray(db.masterLoans)) {
+    const adminAcc = db.users['01907239952'];
+    db.masterLoans = adminAcc?.loans?.length > 0 ? JSON.parse(JSON.stringify(adminAcc.loans)) : [];
+  }
+
+  // Name to phone lookup mapping (Bengali and English aliases)
+  const nameToPhone: { [k: string]: string } = {
+    'harun': '01533271817',
+    'হারুন': '01533271817',
+    'sohel': '01830026574',
+    'sohel apu': '01830026574',
+    'সোহেল': '01830026574',
+    'সোহেল আপু': '01830026574',
+    'musha': '01888141176',
+    'মুসা': '01888141176',
+    'মুষা': '01888141176',
+    'mostafizur': '01907239952',
+    'mostafizur rahman': '01907239952',
+    'মোস্তাফিজুর': '01907239952',
+    'মোস্তাফিজুর রহমান': '01907239952',
+  };
+
+  // Add all existing users in db.users to nameToPhone and idToPhone mapping
+  const idToPhone: { [id: string]: string } = {};
+  for (const [phone, userObj] of Object.entries<any>(db.users)) {
+    const cp = cleanPhone(phone);
+    if (userObj?.id) {
+      idToPhone[userObj.id.toLowerCase()] = cp;
+    }
+    if (userObj?.name) {
+      nameToPhone[userObj.name.trim().toLowerCase()] = cp;
+    }
+  }
+
+  // Group master loans by borrower phone
+  const loansByPhone: { [phone: string]: any[] } = {};
+  const txByPhone: { [phone: string]: any[] } = {};
+
+  // Initialize for all known regular users
+  for (const [phone, userObj] of Object.entries<any>(db.users)) {
+    const cp = cleanPhone(phone);
+    const isSpecialAdmin = cp === '01907239952' || cp === '01613572749' || userObj.role === 'admin' || userObj.role === 'manager';
+    if (!isSpecialAdmin) {
+      loansByPhone[cp] = [];
+      txByPhone[cp] = [];
+    }
+  }
+
+  for (const loan of db.masterLoans) {
+    let bPhone = cleanPhone(loan.borrowerPhone);
+
+    // 1. Check borrowerUserId match
+    if (!bPhone && loan.borrowerUserId) {
+      const match = idToPhone[loan.borrowerUserId.toLowerCase()];
+      if (match) bPhone = match;
+    }
+
+    // 2. Check personName match
+    if (!bPhone && loan.personName) {
+      const norm = loan.personName.trim().toLowerCase();
+      bPhone = nameToPhone[norm] || '';
+      if (!bPhone) {
+        for (const [nKey, pVal] of Object.entries(nameToPhone)) {
+          if (norm.includes(nKey) || nKey.includes(norm)) {
+            bPhone = pVal;
+            break;
+          }
+        }
+      }
+    }
+
+    if (bPhone) {
+      loan.borrowerPhone = bPhone;
+      // Pre-provision user account if it doesn't exist yet!
+      if (!db.users[bPhone]) {
+        db.users[bPhone] = {
+          id: `usr_${bPhone}`,
+          phone: bPhone,
+          name: loan.personName || 'Borrower',
+          role: 'user',
+          darkMode: false,
+          avatarUrl: '',
+          loans: [],
+          transactions: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          lastLoginAt: new Date().toISOString(),
+        };
+      }
+      loan.borrowerUserId = db.users[bPhone].id || `usr_${bPhone}`;
+
+      if (!loansByPhone[bPhone]) loansByPhone[bPhone] = [];
+      loansByPhone[bPhone].push(loan);
+    }
+  }
+
+  // Group master transactions similarly
+  if (Array.isArray(db.masterTransactions)) {
+    for (const tx of db.masterTransactions) {
+      let bPhone = cleanPhone(tx.borrowerPhone);
+      if (!bPhone && tx.personName) {
+        const norm = tx.personName.trim().toLowerCase();
+        bPhone = nameToPhone[norm] || '';
+        if (!bPhone) {
+          for (const [nKey, pVal] of Object.entries(nameToPhone)) {
+            if (norm.includes(nKey) || nKey.includes(norm)) {
+              bPhone = pVal;
+              break;
+            }
+          }
+        }
+      }
+      if (bPhone) {
+        if (!txByPhone[bPhone]) txByPhone[bPhone] = [];
+        txByPhone[bPhone].push(tx);
+      }
+    }
+  }
+
+  // Assign to regular user accounts
+  for (const [phone, userLoans] of Object.entries(loansByPhone)) {
+    const u = db.users[phone];
+    if (u && u.role !== 'admin' && u.role !== 'manager' && phone !== '01907239952' && phone !== '01613572749') {
+      u.loans = userLoans;
+      u.transactions = txByPhone[phone] || [];
+      u.lastSyncAt = new Date().toISOString();
+      u.updatedAt = new Date().toISOString();
+    }
+  }
+
+  // Super Admin, Admin, and Manager accounts hold all master loans
+  for (const [phone, userObj] of Object.entries<any>(db.users)) {
+    const cp = cleanPhone(phone);
+    if (userObj.role === 'admin' || userObj.role === 'manager' || cp === '01907239952' || cp === '01613572749') {
+      userObj.loans = db.masterLoans;
+      if (db.masterTransactions) {
+        userObj.transactions = db.masterTransactions;
+      }
+      userObj.lastSyncAt = new Date().toISOString();
+    }
   }
 }
 
@@ -329,11 +499,16 @@ app.post('/api/auth/login-or-register', (req, res) => {
   }
 });
 
-// 2. Get User Profile by Phone
+// 2. Get User Profile by Phone (Live auto-synced with master loans)
 app.get('/api/user/:phone', (req, res) => {
   try {
     const cleanedPhone = req.params.phone.replace(/[\s\-\+]/g, '').replace(/^88/, '');
     const db = readDatabase();
+
+    // Ensure master loans are freshly mapped and synchronized to all users
+    distributeMasterLoansToUsers(db);
+    writeDatabase(db);
+
     const user = db.users?.[cleanedPhone];
 
     if (!user) {
@@ -387,123 +562,240 @@ app.post('/api/user/settings', (req, res) => {
   }
 });
 
-// 4. Sync User Loan Data to Persistent Database (Instant cross-user synchronization)
-app.post('/api/user/sync-loans', (req, res) => {
+// 4a. Save Single Loan and Real-Time Sync directly to User ID and Master DB
+app.post('/api/admin/save-loan-and-sync', (req, res) => {
   try {
-    const { phone, loans, transactions } = req.body;
+    const { phone, role, loan } = req.body;
+    if (!phone) return res.status(400).json({ error: 'Phone is required' });
+    if (!loan || !loan.loanId) return res.status(400).json({ error: 'Loan data with loanId is required' });
+
+    const cleanedPhone = cleanPhone(phone);
+    const db = readDatabase();
+    if (!db.users) db.users = {};
+    if (!Array.isArray(db.masterLoans)) db.masterLoans = [];
+
+    const user = db.users[cleanedPhone];
+    const isManagerOrAdmin =
+      cleanedPhone === '01907239952' ||
+      cleanedPhone === '01613572749' ||
+      user?.role === 'admin' ||
+      user?.role === 'manager' ||
+      user?.role === 'super_admin' ||
+      role === 'admin' ||
+      role === 'manager' ||
+      role === 'super_admin';
+
+    if (!isManagerOrAdmin) {
+      return res.status(403).json({ error: 'অনুমতি নেই: শুধুমাত্র সুপার অ্যাডমিন বা ম্যানেজার লোন পরিবর্তন ও সেভ করতে পারেন' });
+    }
+
+    // Clean up borrower phone in the loan
+    const bPhone = cleanPhone(loan.borrowerPhone);
+    if (bPhone) {
+      loan.borrowerPhone = bPhone;
+      if (!db.users[bPhone]) {
+        db.users[bPhone] = {
+          id: `usr_${bPhone}`,
+          phone: bPhone,
+          name: loan.personName || 'Borrower',
+          role: 'user',
+          darkMode: false,
+          avatarUrl: '',
+          loans: [],
+          transactions: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          lastLoginAt: new Date().toISOString(),
+        };
+      }
+      loan.borrowerUserId = db.users[bPhone].id || `usr_${bPhone}`;
+    }
+
+    // Update or insert into masterLoans
+    const index = db.masterLoans.findIndex((l: any) => l.loanId === loan.loanId || l.id === loan.id);
+    if (index >= 0) {
+      db.masterLoans[index] = { ...db.masterLoans[index], ...loan };
+    } else {
+      db.masterLoans.unshift(loan);
+    }
+
+    // Distribute to all users immediately
+    distributeMasterLoansToUsers(db);
+
+    const now = new Date().toISOString();
+    const userAgent = (req.headers['user-agent'] || 'Web Browser').toString().slice(0, 80);
+    const actionDesc =
+      index >= 0
+        ? `সুপার অ্যাডমিন/ম্যানেজার কর্তৃক লোন (${loan.loanId}) সফলভাবে সেভ ও ${loan.personName} (${loan.borrowerPhone || 'অ্যাকাউন্ট'})-এর আইডিতে রিয়েল-টাইমে সিঙ্ক করা হয়েছে`
+        : `সুপার অ্যাডমিন/ম্যানেজার কর্তৃক নতুন ৩ মাসের লোন (${loan.loanId}) যোগ করে ${loan.personName} (${loan.borrowerPhone || 'অ্যাকাউন্ট'})-এর আইডিতে রিয়েল-টাইমে সিঙ্ক করা হয়েছে`;
+
+    db.activityLogs.unshift({
+      id: `log_saveloan_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      userId: user?.id || `usr_${cleanedPhone}`,
+      userName: user?.name || 'Admin',
+      userPhone: cleanedPhone,
+      action: index >= 0 ? 'EDIT_LOAN' : 'NEW_LOAN',
+      description: actionDesc,
+      timestamp: now,
+      device: userAgent,
+    });
+    if (db.activityLogs.length > 300) db.activityLogs = db.activityLogs.slice(0, 300);
+
+    writeDatabase(db);
+
+    const targetUser = bPhone ? db.users[bPhone] : null;
+
+    return res.json({
+      success: true,
+      message: `সফলভাবে সেভ হয়েছে এবং ${loan.personName} (${loan.borrowerUserId || loan.borrowerPhone || 'ইউজার'})-এর আইডিতে রিয়েল-টাইমে পৌঁছে গেছে!`,
+      loan,
+      targetUserId: targetUser?.id || loan.borrowerUserId,
+      targetUserPhone: bPhone,
+      targetUserName: targetUser?.name || loan.personName,
+      userLoansCount: targetUser?.loans?.length || 0,
+      syncedAt: now,
+      masterLoans: db.masterLoans,
+    });
+  } catch (err: any) {
+    console.error('Error in save-loan-and-sync:', err);
+    res.status(500).json({ error: 'Failed to save and sync loan to user account' });
+  }
+});
+
+// 4b. Save and Real-Time Sync endpoint for Super Admin, Admin, and Manager (Bulk / All Loans)
+app.post('/api/admin/save-and-sync', (req, res) => {
+  try {
+    const { phone, role, loans, transactions, changeDescription } = req.body;
     if (!phone) return res.status(400).json({ error: 'Phone is required' });
 
-    const cleanedPhone = phone.replace(/[\s\-\+]/g, '').replace(/^88/, '');
+    const cleanedPhone = cleanPhone(phone);
     const db = readDatabase();
     if (!db.users) db.users = {};
 
-    if (!db.users[cleanedPhone]) {
-      return res.status(404).json({ error: 'User not found' });
+    const user = db.users[cleanedPhone];
+    const isManagerOrAdmin =
+      cleanedPhone === '01907239952' ||
+      cleanedPhone === '01613572749' ||
+      user?.role === 'admin' ||
+      user?.role === 'manager' ||
+      user?.role === 'super_admin' ||
+      role === 'admin' ||
+      role === 'manager' ||
+      role === 'super_admin';
+
+    if (!isManagerOrAdmin) {
+      return res.status(403).json({ error: 'অনুমতি নেই: শুধুমাত্র সুপার অ্যাডমিন বা ম্যানেজার ডাটা সিঙ্ক করতে পারেন' });
     }
 
-    db.users[cleanedPhone].loans = loans || [];
-    db.users[cleanedPhone].transactions = transactions || [];
-    db.users[cleanedPhone].lastSyncAt = new Date().toISOString();
-
-    const isSuperAdmin = cleanedPhone === '01907239952' || cleanedPhone === '01613572749' || db.users[cleanedPhone]?.role === 'admin';
-
-    // If Super Admin is updating loans, instantly distribute and synchronize
-    // each borrower's respective loans & transactions into their own individual user account!
-    if (isSuperAdmin && Array.isArray(loans)) {
-      // 1. Build a name-to-phone directory of all known users
-      const nameToPhone: { [normalizedName: string]: string } = {
-        'mostafizur': '01907239952',
-        'mostafizur rahman': '01907239952',
-        'harun': '01533271817',
-        'sohel apu': '01830026574',
-        'musha': '01888141176',
-      };
-
-      for (const [uPhone, uObj] of Object.entries<any>(db.users)) {
-        if (uObj?.name && typeof uObj.name === 'string') {
-          nameToPhone[uObj.name.trim().toLowerCase()] = uPhone;
-        }
-      }
-
-      // 2. Group loans by borrower phone
-      const loansByUserPhone: { [uPhone: string]: any[] } = {};
-      const txByUserPhone: { [uPhone: string]: any[] } = {};
-
-      // Initialize empty arrays for all registered users so if all loans are paid/deleted, it reflects
-      for (const uPhone of Object.keys(db.users)) {
-        if (uPhone !== cleanedPhone) {
-          loansByUserPhone[uPhone] = [];
-          txByUserPhone[uPhone] = [];
-        }
-      }
-
-      for (const loan of loans) {
-        let targetPhone = loan.borrowerPhone ? loan.borrowerPhone.replace(/[\s\-\+]/g, '').replace(/^88/, '') : '';
-        if (!targetPhone && loan.personName) {
-          const normName = loan.personName.trim().toLowerCase();
-          targetPhone = nameToPhone[normName] || '';
-          if (!targetPhone) {
-            for (const [knownName, phoneVal] of Object.entries(nameToPhone)) {
-              if (normName.includes(knownName) || knownName.includes(normName)) {
-                targetPhone = phoneVal;
-                break;
-              }
-            }
-          }
-        }
-
-        if (targetPhone && targetPhone !== cleanedPhone) {
-          if (!loansByUserPhone[targetPhone]) loansByUserPhone[targetPhone] = [];
-          loansByUserPhone[targetPhone].push(loan);
-        }
-      }
-
-      // Group transactions similarly
-      if (Array.isArray(transactions)) {
-        for (const tx of transactions) {
-          let targetPhone = tx.borrowerPhone ? tx.borrowerPhone.replace(/[\s\-\+]/g, '').replace(/^88/, '') : '';
-          if (!targetPhone && tx.personName) {
-            const normName = tx.personName.trim().toLowerCase();
-            targetPhone = nameToPhone[normName] || '';
-            if (!targetPhone) {
-              for (const [knownName, phoneVal] of Object.entries(nameToPhone)) {
-                if (normName.includes(knownName) || knownName.includes(normName)) {
-                  targetPhone = phoneVal;
-                  break;
-                }
-              }
-            }
-          }
-
-          if (targetPhone && targetPhone !== cleanedPhone) {
-            if (!txByUserPhone[targetPhone]) txByUserPhone[targetPhone] = [];
-            txByUserPhone[targetPhone].push(tx);
-          }
-        }
-      }
-
-      // 3. Write each user's loans and transactions into db.users
-      for (const [targetPhone, userLoans] of Object.entries(loansByUserPhone)) {
-        if (db.users[targetPhone]) {
-          db.users[targetPhone].loans = userLoans;
-          if (txByUserPhone[targetPhone]) {
-            db.users[targetPhone].transactions = txByUserPhone[targetPhone];
-          }
-          db.users[targetPhone].lastSyncAt = new Date().toISOString();
-          db.users[targetPhone].updatedAt = new Date().toISOString();
-        }
-      }
+    if (Array.isArray(loans)) {
+      db.masterLoans = loans;
     }
+    if (Array.isArray(transactions)) {
+      db.masterTransactions = transactions;
+    }
+
+    // Run real-time distribution across all user accounts
+    distributeMasterLoansToUsers(db);
+
+    const now = new Date().toISOString();
+    const userAgent = (req.headers['user-agent'] || 'Web Browser').toString().slice(0, 80);
+    db.activityLogs.unshift({
+      id: `log_sync_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      userId: user?.id || `usr_${cleanedPhone}`,
+      userName: user?.name || 'Admin',
+      userPhone: cleanedPhone,
+      action: 'DATA_SYNC',
+      description: changeDescription || `সুপার অ্যাডমিন/ম্যানেজার কর্তৃক সফলভাবে ${db.masterLoans.length}টি লোন ইউজারের আইডিতে রিয়েল-টাইমে সিঙ্ক করা হয়েছে`,
+      timestamp: now,
+      device: userAgent,
+    });
+    if (db.activityLogs.length > 300) db.activityLogs = db.activityLogs.slice(0, 300);
 
     writeDatabase(db);
+
+    const syncedUsers = Object.keys(db.users).filter(p => p !== cleanedPhone && (db.users[p].loans?.length || 0) > 0);
+
     return res.json({
       success: true,
-      lastSyncAt: db.users[cleanedPhone].lastSyncAt,
-      message: isSuperAdmin ? 'Master loans synced across all borrower accounts' : 'User loans synced successfully'
+      message: 'সফলভাবে সব লোন সংরক্ষিত হয়েছে এবং সংশ্লিষ্ট সকল ইউজারের আইডিতে রিয়েল-টাইমে সিঙ্ক হয়েছে',
+      syncedAt: now,
+      totalLoans: db.masterLoans.length,
+      syncedUsersCount: syncedUsers.length,
+      syncedUsers,
+      masterLoans: db.masterLoans,
+    });
+  } catch (err: any) {
+    console.error('Error in save-and-sync:', err);
+    res.status(500).json({ error: 'Failed to save and sync data' });
+  }
+});
+
+// 5. Sync User Loan Data to Persistent Database (Cross-user backward compatibility)
+app.post('/api/user/sync-loans', (req, res) => {
+  try {
+    const { phone, role, loans, transactions } = req.body;
+    if (!phone) return res.status(400).json({ error: 'Phone is required' });
+
+    const cleanedPhone = cleanPhone(phone);
+    const db = readDatabase();
+    if (!db.users) db.users = {};
+
+    const user = db.users[cleanedPhone];
+    const isManagerOrAdmin =
+      cleanedPhone === '01907239952' ||
+      cleanedPhone === '01613572749' ||
+      user?.role === 'admin' ||
+      user?.role === 'manager' ||
+      user?.role === 'super_admin' ||
+      role === 'admin' ||
+      role === 'manager' ||
+      role === 'super_admin';
+
+    if (isManagerOrAdmin && Array.isArray(loans)) {
+      db.masterLoans = loans;
+      if (Array.isArray(transactions)) {
+        db.masterTransactions = transactions;
+      }
+      distributeMasterLoansToUsers(db);
+    } else if (db.users[cleanedPhone]) {
+      // For regular users: protect backend assigned loans, ensure distribution is fresh
+      distributeMasterLoansToUsers(db);
+    }
+
+    if (db.users[cleanedPhone]) {
+      db.users[cleanedPhone].lastSyncAt = new Date().toISOString();
+    }
+    writeDatabase(db);
+
+    return res.json({
+      success: true,
+      lastSyncAt: new Date().toISOString(),
+      userLoans: db.users[cleanedPhone]?.loans || [],
+      message: isManagerOrAdmin ? 'Master loans synced across all borrower accounts' : 'User loans synced successfully'
     });
   } catch (err: any) {
     console.error('Error syncing loans:', err);
     res.status(500).json({ error: 'Failed to sync loans' });
+  }
+});
+
+// 6. Get all registered borrowers with User IDs for Admin loan management
+app.get('/api/admin/all-borrowers', (req, res) => {
+  try {
+    const db = readDatabase();
+    distributeMasterLoansToUsers(db);
+    const borrowers = Object.entries<any>(db.users).map(([phone, u]) => ({
+      id: u.id || `usr_${phone}`,
+      phone: u.phone,
+      name: u.name,
+      role: u.role,
+      loanCount: Array.isArray(u.loans) ? u.loans.length : 0,
+      totalDue: Array.isArray(u.loans) ? u.loans.reduce((sum: number, l: any) => sum + (l.totalDue || 0), 0) : 0,
+      lastSyncAt: u.lastSyncAt,
+    }));
+    return res.json({ success: true, borrowers });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch borrowers' });
   }
 });
 

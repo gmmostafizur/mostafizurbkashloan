@@ -444,6 +444,24 @@ export const NewLoanModal: React.FC<NewLoanModalProps> = ({
                   </span>
                 </div>
               </div>
+
+              {/* Target User Account ID Real-Time Sync Indicator */}
+              {borrowerPhone.trim() && (
+                <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-300 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 animate-in fade-in duration-200">
+                  <div className="flex items-center gap-1.5 font-semibold">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>
+                      {lang === 'bn' ? 'টার্গেট ইউজার আইডি:' : 'Target User ID:'}{' '}
+                      <code className="font-mono bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 text-slate-900 dark:text-white font-bold">
+                        usr_{borrowerPhone.replace(/[\s\-\+]/g, '').replace(/^88/, '')}
+                      </code>
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-white dark:bg-slate-900 px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-700 self-start sm:self-auto">
+                    {lang === 'bn' ? '⚡ সেভ করলে রিয়েল-টাইমে সিঙ্ক হবে' : '⚡ Real-time Sync on Save'}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* 2. Loan ID & Principal Amount (With 3-Month EMI Setup) */}
@@ -647,13 +665,13 @@ export const NewLoanModal: React.FC<NewLoanModalProps> = ({
               </button>
               <button
                 type="submit"
-                className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-[#c40e5d] to-[#E2136E] hover:from-[#b00b52] hover:to-[#c40e5d] rounded-xl shadow-md shadow-pink-600/30 transition-all active:scale-95 cursor-pointer"
+                className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-emerald-600 via-teal-600 to-[#E2136E] hover:from-emerald-700 hover:to-[#c40e5d] rounded-xl shadow-md shadow-emerald-600/20 transition-all active:scale-95 cursor-pointer"
               >
                 <Save className="w-4 h-4" />
                 <span>
                   {loanToEdit
-                    ? (lang === 'bn' ? 'লোন আপডেট ও সিন্ক করুন' : 'Update & Sync Loan')
-                    : (lang === 'bn' ? 'নতুন লোন সংরক্ষণ ও সিন্ক করুন' : 'Save & Sync Loan')}
+                    ? (lang === 'bn' ? '💾 পরিবর্তন সংরক্ষণ ও ইউজারের আইডিতে সিঙ্ক করুন' : '💾 Save & Real-Time Sync to User ID')
+                    : (lang === 'bn' ? '💾 নতুন লোন সংরক্ষণ ও ইউজারের আইডিতে সিঙ্ক করুন' : '💾 Save & Real-Time Sync to User ID')}
                 </span>
               </button>
             </div>

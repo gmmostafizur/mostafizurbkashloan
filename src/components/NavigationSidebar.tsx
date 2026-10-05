@@ -24,6 +24,7 @@ import {
   X,
   ShieldCheck,
   ChevronRight,
+  Save,
 } from 'lucide-react';
 
 interface NavigationSidebarProps {
@@ -40,6 +41,7 @@ interface NavigationSidebarProps {
   onOpenRolloverModal: () => void;
   onOpenSettings: () => void;
   onLogout: () => void;
+  onSaveAndSync?: () => void;
 }
 
 export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
@@ -56,6 +58,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
   onOpenRolloverModal,
   onOpenSettings,
   onLogout,
+  onSaveAndSync,
 }) => {
   const t = getT(lang);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -171,15 +174,34 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
                 <span>{lang === 'bn' ? 'রোলওভার' : 'Rollover'}</span>
               </button>
             </div>
+
+            {/* Explicit Save & Real-Time Sync to All Users Button */}
+            {onSaveAndSync && (
+              <button
+                type="button"
+                onClick={onSaveAndSync}
+                className="w-full flex items-center justify-center gap-1.5 py-2 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-all shadow-xs cursor-pointer active:scale-95 border border-emerald-500"
+                title={lang === 'bn' ? 'ডাটাবেজ সেভ করুন এবং সকল ইউজারের অ্যাকাউন্টে রিয়েল-টাইমে পাঠান' : 'Save all data and sync to user accounts'}
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>{lang === 'bn' ? 'সেভ ও ইউজারের আইডিতে সিঙ্ক' : 'Save & Sync to User IDs'}</span>
+              </button>
+            )}
           </div>
         )}
 
-        {/* Read-Only Mode Explanation Notice */}
+        {/* Read-Only Mode Explanation Notice with Live Sync status */}
         {!isManager && (
-          <div className="p-2.5 bg-blue-50/80 dark:bg-blue-950/40 rounded-xl border border-blue-200 dark:border-blue-900/60 text-[11px] text-blue-800 dark:text-blue-300 leading-snug">
-            {lang === 'bn'
-              ? 'এখানে আপনি শুধুমাত্র আপনার লোনের বকেয়া, জমা হিস্ট্রি এবং মাসিক রিপোর্ট দেখতে পারবেন।'
-              : 'You have view-only access to your loans, payment history, and monthly report.'}
+          <div className="p-2.5 bg-blue-50/80 dark:bg-blue-950/40 rounded-xl border border-blue-200 dark:border-blue-900/60 text-[11px] text-blue-800 dark:text-blue-300 leading-snug space-y-1">
+            <div className="flex items-center gap-1.5 font-bold text-emerald-600 dark:text-emerald-400">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>{lang === 'bn' ? 'রিয়েল-টাইম ডাটাবেজ সিঙ্ক সক্রিয়' : 'Real-time Database Live'}</span>
+            </div>
+            <p className="text-[10px] text-slate-600 dark:text-slate-400">
+              {lang === 'bn'
+                ? 'অ্যাডমিন/ম্যানেজার কোনো তথ্য আপডেট করলে তা সরাসরি আপনার এই অ্যাকাউন্টে রিয়েল-টাইমে আপডেট হয়।'
+                : 'Any updates from admin automatically reflect in your account in real-time.'}
+            </p>
           </div>
         )}
 
