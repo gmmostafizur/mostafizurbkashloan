@@ -1,7 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { LoanRecord, Language } from '../types/loan';
 import { getT } from '../utils/translations';
-import { formatCurrency, isDateOverdue, getDaysRemaining, toBanglaNumber, getLoanMonthStatusInfo } from '../utils/dateUtils';
+import {
+  formatCurrency,
+  isDateOverdue,
+  getDaysRemaining,
+  toBanglaNumber,
+  getLoanMonthStatusInfo,
+  getThreeMonthNames,
+} from '../utils/dateUtils';
 import { exportLoansToCSV, exportLoansToPDF } from '../utils/exportUtils';
 import { RepaymentProgressBar } from './RepaymentProgressBar';
 import {
@@ -60,6 +67,18 @@ export const LoansTable: React.FC<LoansTableProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'overdue' | 'due_soon' | 'paid'>('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [savedRowLoanId, setSavedRowLoanId] = useState<string | null>(null);
+
+  // Dynamic 3-month schedule for overall overview and table headers
+  const globalMonths = useMemo(() => getThreeMonthNames(null, lang), [lang]);
+
+  const handleSaveRowLoan = (loan: LoanRecord) => {
+    if (onSaveLoan) {
+      onSaveLoan(loan);
+      setSavedRowLoanId(loan.loanId);
+      setTimeout(() => setSavedRowLoanId(null), 1800);
+    }
+  };
 
   // Super Admin Note Modal & editing state
   const [activeNoteLoan, setActiveNoteLoan] = useState<LoanRecord | null>(null);
@@ -467,17 +486,26 @@ export const LoansTable: React.FC<LoansTableProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-[#E2136E] flex items-center gap-1">
                 <Calendar className="w-3 h-3" />
-                <span>{lang === 'bn' ? 'এই মাসের কিস্তি' : 'This Month (EMI 1)'}</span>
+                <span>{lang === 'bn' ? 'চলতি মাসের কিস্তি' : 'Current Month (EMI 1)'}</span>
               </span>
               <span className="text-[9px] bg-pink-100 text-[#E2136E] px-1.5 py-0.2 rounded font-medium">
-                {lang === 'bn' ? 'বর্তমান মাস' : 'Current'}
+                {globalMonths.month1}
               </span>
             </div>
             <div className="mt-1 text-base font-bold text-slate-900 font-mono-numbers">
-              {formatCurrency(borrowerEmiSummary.currentMonthTotal, lang)}
+              {borrowerEmiSummary.currentMonthTotal > 0 ? (
+                formatCurrency(borrowerEmiSummary.currentMonthTotal, lang)
+              ) : borrowerEmiSummary.totalDue > 0 ? (
+                <span className="text-emerald-600 text-sm flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>{lang === 'bn' ? 'পরিশোধিত (৳০)' : 'Paid (৳0)'}</span>
+                </span>
+              ) : (
+                formatCurrency(0, lang)
+              )}
             </div>
             <div className="mt-0.5 text-[10px] text-slate-500 flex items-center justify-between">
-              <span>{lang === 'bn' ? '১ম কিস্তির পরিমাণ' : '1st installment'}</span>
+              <span>{globalMonths.month1Short} {lang === 'bn' ? '১ম কিস্তি' : '1st EMI'}</span>
               <span className="text-[#E2136E] font-medium text-[9px]">
                 {highlightedEmi === 'current'
                   ? (lang === 'bn' ? 'সক্রিয় ✓' : 'Active ✓')
@@ -499,17 +527,17 @@ export const LoansTable: React.FC<LoansTableProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-blue-700 flex items-center gap-1">
                 <Clock className="w-3 h-3" />
-                <span>{lang === 'bn' ? 'পরের মাসের কিস্তি' : 'Next Month (EMI 2)'}</span>
+                <span>{lang === 'bn' ? '২য় মাসের কিস্তি' : '2nd Month (EMI 2)'}</span>
               </span>
               <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded font-medium">
-                {lang === 'bn' ? '২য় কিস্তি' : '2nd Month'}
+                {globalMonths.month2}
               </span>
             </div>
             <div className="mt-1 text-base font-bold text-slate-900 font-mono-numbers">
               {formatCurrency(borrowerEmiSummary.secondMonthTotal, lang)}
             </div>
             <div className="mt-0.5 text-[10px] text-slate-500 flex items-center justify-between">
-              <span>{lang === 'bn' ? 'আগামী মাসের প্রদেয়' : 'Upcoming schedule'}</span>
+              <span>{globalMonths.month2Short} {lang === 'bn' ? '২য় কিস্তি' : '2nd EMI'}</span>
               <span className="text-blue-600 font-medium text-[9px]">
                 {highlightedEmi === 'second'
                   ? (lang === 'bn' ? 'সক্রিয় ✓' : 'Active ✓')
@@ -534,14 +562,14 @@ export const LoansTable: React.FC<LoansTableProps> = ({
                 <span>{lang === 'bn' ? '৩য় মাসের কিস্তি' : '3rd Month (EMI 3)'}</span>
               </span>
               <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.2 rounded font-medium">
-                {lang === 'bn' ? 'শেষ কিস্তি' : 'Final EMI'}
+                {globalMonths.month3}
               </span>
             </div>
             <div className="mt-1 text-base font-bold text-slate-900 font-mono-numbers">
               {formatCurrency(borrowerEmiSummary.thirdMonthTotal, lang)}
             </div>
             <div className="mt-0.5 text-[10px] text-slate-500 flex items-center justify-between">
-              <span>{lang === 'bn' ? 'চূড়ান্ত কিস্তির পরিমাণ' : 'Final installment'}</span>
+              <span>{globalMonths.month3Short} {lang === 'bn' ? '৩য় কিস্তি' : '3rd EMI'}</span>
               <span className="text-emerald-600 font-medium text-[9px]">
                 {highlightedEmi === 'third'
                   ? (lang === 'bn' ? 'সক্রিয় ✓' : 'Active ✓')
@@ -648,7 +676,10 @@ export const LoansTable: React.FC<LoansTableProps> = ({
                 }`}
                 title="Click to toggle highlight"
               >
-                {t.colCurrentEmi}
+                <div>{lang === 'bn' ? 'চলতি মাসের কিস্তি' : 'Current Month EMI'}</div>
+                <div className="text-[10px] font-medium normal-case text-pink-600 dark:text-pink-400">
+                  ({globalMonths.month1})
+                </div>
               </th>
               <th
                 onClick={() => setHighlightedEmi(highlightedEmi === 'second' ? 'all' : 'second')}
@@ -657,7 +688,10 @@ export const LoansTable: React.FC<LoansTableProps> = ({
                 }`}
                 title="Click to toggle highlight"
               >
-                {t.colSecondEmi}
+                <div>{lang === 'bn' ? '২য় মাসের কিস্তি' : '2nd Month EMI'}</div>
+                <div className="text-[10px] font-medium normal-case text-blue-600 dark:text-blue-400">
+                  ({globalMonths.month2})
+                </div>
               </th>
               <th
                 onClick={() => setHighlightedEmi(highlightedEmi === 'third' ? 'all' : 'third')}
@@ -666,7 +700,10 @@ export const LoansTable: React.FC<LoansTableProps> = ({
                 }`}
                 title="Click to toggle highlight"
               >
-                {t.colThirdEmi}
+                <div>{lang === 'bn' ? '৩য় মাসের কিস্তি' : '3rd Month EMI'}</div>
+                <div className="text-[10px] font-medium normal-case text-emerald-600 dark:text-emerald-400">
+                  ({globalMonths.month3})
+                </div>
               </th>
               <th className="py-3 px-3 text-right">{t.colTotalDue}</th>
               <th className="py-3 px-3">{t.colPaidProgress}</th>
@@ -684,9 +721,11 @@ export const LoansTable: React.FC<LoansTableProps> = ({
               </tr>
             ) : (
               filteredLoans.map((loan) => {
-                const isOverdue = isDateOverdue(loan.nextLoanSubmitDate);
-                const daysRemaining = getDaysRemaining(loan.nextLoanSubmitDate);
                 const isSettled = loan.totalDue <= 0 || loan.status === 'paid';
+                const isCurrentPaid = loan.currentMonthEmi <= 0 && !isSettled;
+                const isOverdue = !isCurrentPaid && isDateOverdue(loan.nextLoanSubmitDate);
+                const daysRemaining = getDaysRemaining(loan.nextLoanSubmitDate);
+                const loanMonths = getThreeMonthNames(loan.nextLoanSubmitDate, lang);
 
                 return (
                   <tr
@@ -781,7 +820,26 @@ export const LoansTable: React.FC<LoansTableProps> = ({
                           : 'text-slate-900 dark:text-white'
                       }`}
                     >
-                      {formatCurrency(loan.currentMonthEmi, lang)}
+                      {loan.currentMonthEmi > 0 ? (
+                        <div>
+                          <div>{formatCurrency(loan.currentMonthEmi, lang)}</div>
+                          <div className="text-[10px] font-normal text-pink-600 dark:text-pink-400">
+                            ({loanMonths.month1Short})
+                          </div>
+                        </div>
+                      ) : loan.totalDue > 0 ? (
+                        <div className="flex flex-col items-end">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.5 rounded-md">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                            <span>{lang === 'bn' ? 'পরিশোধিত (৳০)' : 'Paid (৳0)'}</span>
+                          </span>
+                          <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">
+                            {loanMonths.month1Short} {lang === 'bn' ? 'জমা সম্পন্ন' : 'cleared'}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-emerald-600 font-medium">{formatCurrency(0, lang)}</span>
+                      )}
                     </td>
 
                     {/* 2nd Month EMI */}
@@ -792,7 +850,14 @@ export const LoansTable: React.FC<LoansTableProps> = ({
                           : 'text-slate-500 dark:text-slate-400'
                       }`}
                     >
-                      {loan.secondMonthEmi > 0 ? formatCurrency(loan.secondMonthEmi, lang) : '-'}
+                      {loan.secondMonthEmi > 0 ? (
+                        <div>
+                          <div className="font-bold text-blue-700 dark:text-blue-300">{formatCurrency(loan.secondMonthEmi, lang)}</div>
+                          <div className="text-[10px] font-normal text-blue-600 dark:text-blue-400">
+                            ({loanMonths.month2Short})
+                          </div>
+                        </div>
+                      ) : '-'}
                     </td>
 
                     {/* 3rd Month EMI */}
@@ -803,7 +868,14 @@ export const LoansTable: React.FC<LoansTableProps> = ({
                           : 'text-slate-500 dark:text-slate-400'
                       }`}
                     >
-                      {loan.thirdMonthEmi > 0 ? formatCurrency(loan.thirdMonthEmi, lang) : '-'}
+                      {loan.thirdMonthEmi > 0 ? (
+                        <div>
+                          <div className="font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(loan.thirdMonthEmi, lang)}</div>
+                          <div className="text-[10px] font-normal text-emerald-600 dark:text-emerald-400">
+                            ({loanMonths.month3Short})
+                          </div>
+                        </div>
+                      ) : '-'}
                     </td>
 
                     {/* Total Due */}
@@ -823,7 +895,11 @@ export const LoansTable: React.FC<LoansTableProps> = ({
                       </div>
                       {!isSettled && (
                         <div className="text-[10px] text-slate-400">
-                          {isOverdue ? (
+                          {isCurrentPaid ? (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                              {lang === 'bn' ? `পরবর্তী কিস্তি: ${loanMonths.month2Short}` : `Next EMI: ${loanMonths.month2Short}`}
+                            </span>
+                          ) : isOverdue ? (
                             <span className="text-rose-600 font-medium">
                               {Math.abs(daysRemaining)}d overdue
                             </span>
@@ -845,6 +921,14 @@ export const LoansTable: React.FC<LoansTableProps> = ({
                             <span className="text-emerald-700 font-medium flex items-center gap-1">
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               {t.statusPaid}
+                            </span>
+                          );
+                        }
+                        if (isCurrentPaid) {
+                          return (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>{lang === 'bn' ? `${loanMonths.month1Short} পরিশোধিত ✓` : `${loanMonths.month1Short} Paid ✓`}</span>
                             </span>
                           );
                         }
@@ -931,6 +1015,30 @@ export const LoansTable: React.FC<LoansTableProps> = ({
                         )}
                         {!isReadOnly && (
                           <div className="flex items-center gap-1">
+                            {onSaveLoan && (
+                              <button
+                                type="button"
+                                onClick={() => handleSaveRowLoan(loan)}
+                                className={`px-2 py-1 text-xs font-semibold rounded-lg transition-all flex items-center gap-1 shadow-2xs active:scale-95 cursor-pointer ${
+                                  savedRowLoanId === loan.loanId
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800'
+                                }`}
+                                title={lang === 'bn' ? 'এই লোন সেভ করুন ও ইউজারের আইডিতে রিয়েল-টাইমে সিঙ্ক করুন' : 'Save loan & sync to User ID'}
+                              >
+                                {savedRowLoanId === loan.loanId ? (
+                                  <>
+                                    <Check className="w-3 h-3 text-white" />
+                                    <span>{lang === 'bn' ? 'সেভ ✓' : 'Saved ✓'}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Save className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                    <span>{lang === 'bn' ? 'Save' : 'Save'}</span>
+                                  </>
+                                )}
+                              </button>
+                            )}
                             <button
                               onClick={() => onEditLoan(loan)}
                               className="p-1.5 text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition-colors cursor-pointer"

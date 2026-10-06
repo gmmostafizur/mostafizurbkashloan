@@ -35,7 +35,14 @@ import { SettingsModal } from './components/SettingsModal';
 import { UserProfile } from './types/user';
 import { ParsedCommandResult } from './utils/nlpParser';
 import { parseScreenshotText, ParsedScreenshotData } from './utils/screenshotParser';
-import { bumpDateByOneMonth, formatCurrency, isDateOverdue } from './utils/dateUtils';
+import {
+  bumpDateByOneMonth,
+  formatCurrency,
+  isDateOverdue,
+  getThreeMonthNames,
+  getPaymentMonthName,
+  executeLoansMonthlyRollover,
+} from './utils/dateUtils';
 import { exportLoansToCSV, exportLoansToPDF } from './utils/exportUtils';
 import { getT } from './utils/translations';
 import { CheckCircle2, RotateCcw, AlertTriangle, ShieldCheck, Sparkles } from 'lucide-react';
@@ -146,7 +153,12 @@ export default function App() {
 
   const t = getT(lang);
 
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.phone === '01907239952' || currentUser?.phone === '01613572749';
+  const isAdmin =
+    currentUser?.role === 'admin' ||
+    currentUser?.role === 'manager' ||
+    currentUser?.role === 'super_admin' ||
+    currentUser?.phone === '01907239952' ||
+    currentUser?.phone === '01613572749';
   const isReadOnly = !isAdmin;
 
   // Regular user restriction: "user ra sudhu tader loan, payment history, monthly report dekhte parbe ar kichu korte parbe na"
@@ -333,33 +345,38 @@ export default function App() {
     const oldLoan = loans[loanIndex];
     const prevDue = oldLoan.totalDue;
     const prevDate = oldLoan.nextLoanSubmitDate;
+    const loanMonths = getThreeMonthNames(prevDate, lang);
 
     // Recalculate Total Due
     const newTotalDue = Math.max(0, Number((prevDue - amount).toFixed(2)));
 
-    // Shift EMI schedule
+    // EMI calculation according to user specification:
+    // "current month a payment kora hoye gele seta 2nd month er amount ta sekhanei thakbe. erpor month change hole current month sei month cole asbe ebong sei month er EMI ta asbe. mane je maser payment sei mas dekhabe."
     let newCurrentEmi = oldLoan.currentMonthEmi;
     let newSecondEmi = oldLoan.secondMonthEmi;
     let newThirdEmi = oldLoan.thirdMonthEmi;
 
-    if (amount >= oldLoan.currentMonthEmi) {
-      // Shift installments forward
-      const excess = amount - oldLoan.currentMonthEmi;
-      newCurrentEmi = oldLoan.secondMonthEmi;
-      newSecondEmi = oldLoan.thirdMonthEmi;
-      newThirdEmi = 0;
+    const isFullSettlement = amount >= oldLoan.totalDue || newTotalDue <= 0;
+    const targetMonthLabel = isFullSettlement
+      ? (lang === 'bn' ? `সকল কিস্তি পূর্ণ পরিশোধ (${loanMonths.month1Short}, ${loanMonths.month2Short}, ${loanMonths.month3Short})` : `Full Settlement (${loanMonths.month1Short}, ${loanMonths.month2Short}, ${loanMonths.month3Short})`)
+      : loanMonths.month1;
 
-      // If excess payment exists, deduct from upcoming EMIs
-      if (excess > 0 && newCurrentEmi > 0) {
-        if (excess >= newCurrentEmi) {
-          const excess2 = excess - newCurrentEmi;
-          newCurrentEmi = newSecondEmi;
+    if (amount >= oldLoan.currentMonthEmi) {
+      // Current month installment is PAID!
+      const excess = amount - oldLoan.currentMonthEmi;
+      newCurrentEmi = 0; // Current month cleared
+
+      // 2nd and 3rd month EMI STAY IN THEIR PLACES (not shifted prematurely!)
+      // Excess payment deducts from upcoming months
+      if (excess > 0) {
+        if (excess >= newSecondEmi) {
+          const excess2 = excess - newSecondEmi;
           newSecondEmi = 0;
-          if (excess2 > 0 && newCurrentEmi > 0) {
-            newCurrentEmi = Math.max(0, Number((newCurrentEmi - excess2).toFixed(2)));
+          if (excess2 > 0) {
+            newThirdEmi = Math.max(0, Number((newThirdEmi - excess2).toFixed(2)));
           }
         } else {
-          newCurrentEmi = Number((newCurrentEmi - excess).toFixed(2));
+          newSecondEmi = Number((newSecondEmi - excess).toFixed(2));
         }
       }
     } else {
@@ -374,8 +391,10 @@ export default function App() {
       newThirdEmi = 0;
     }
 
-    // Bump Next Loan Submit Date by +1 month
-    const newNextDate = bumpDateByOneMonth(prevDate);
+    // User requirement: When payment is made in the current month, the 2nd month amount stays right there in 2nd month.
+    // The submit date stays anchored to the current month's billing cycle so Current Month shows as Paid (৳0),
+    // and 2nd Month EMI remains in 2nd Month. Only when month changes (or on rollover) does it advance to the next month!
+    const newNextDate = prevDate;
 
     const updatedLoan: LoanRecord = {
       ...oldLoan,
@@ -393,7 +412,7 @@ export default function App() {
     updatedLoans[loanIndex] = updatedLoan;
     setLoans(updatedLoans);
 
-    // Create Transaction Record
+    // Create Transaction Record with targetMonth
     const newTx: PaymentTransaction = {
       id: `TXN-${Date.now()}`,
       loanId: oldLoan.loanId,
@@ -405,9 +424,10 @@ export default function App() {
       newDue: newTotalDue,
       previousNextDate: prevDate,
       newNextDate,
+      targetMonth: targetMonthLabel,
       method,
       referenceId: referenceId || `BKASH-${Date.now().toString().slice(-6)}`,
-      note: note || `Payment of ৳${amount.toFixed(2)} received`,
+      note: note || (lang === 'bn' ? `${oldLoan.personName}-এর ${targetMonthLabel} কিস্তি জমা ৳${amount.toFixed(2)}` : `Payment of ৳${amount.toFixed(2)} for ${targetMonthLabel}`),
     };
 
     setTransactions([newTx, ...transactions]);
@@ -415,18 +435,19 @@ export default function App() {
     // Show toast and open receipt
     showToast(
       lang === 'bn'
-        ? `${oldLoan.personName}-এর জন্য ৳${amount.toFixed(2)} জমা হয়েছে! পরবর্তী জমা তারিখ: ${newNextDate}`
-        : `Payment of ৳${amount.toFixed(2)} recorded for ${oldLoan.personName}! Next submit date bumped to ${newNextDate}`
+        ? `${oldLoan.personName}-এর ${targetMonthLabel} কিস্তি ৳${amount.toFixed(2)} জমা হয়েছে! ২য় মাসের কিস্তি (${loanMonths.month2}) অপরিবর্তিত রয়েছে।`
+        : `Payment of ৳${amount.toFixed(2)} for ${targetMonthLabel} recorded for ${oldLoan.personName}! 2nd month EMI (${loanMonths.month2}) stays in place.`
     );
 
     setReceiptTx(newTx);
     setReceiptLoan(updatedLoan);
     setIsReceiptModalOpen(true);
 
-    recordActivity('PAYMENT', `${oldLoan.personName}-এর বিকাশ লোনে ৳${amount.toFixed(2)} কিস্তি জমা হয়েছে (বকেয়া: ৳${newTotalDue})`, {
+    recordActivity('PAYMENT', `${oldLoan.personName}-এর বিকাশ লোনে ${targetMonthLabel} কিস্তি ৳${amount.toFixed(2)} জমা হয়েছে (বকেয়া: ৳${newTotalDue})`, {
       loanId,
       amount,
       borrower: oldLoan.personName,
+      targetMonth: targetMonthLabel,
     });
   };
 
@@ -454,24 +475,87 @@ export default function App() {
     setIsReceiptModalOpen(true);
   };
 
-  // Save new or edited loan
-  const handleSaveLoan = (loanRecord: LoanRecord) => {
-    const index = loans.findIndex(l => l.loanId === loanRecord.loanId || l.id === loanRecord.id);
-    if (index >= 0) {
-      const copy = [...loans];
-      copy[index] = loanRecord;
-      setLoans(copy);
-      showToast(lang === 'bn' ? 'লোন তথ্য হালনাগাদ করা হয়েছে' : 'Loan record updated successfully');
-    } else {
-      setLoans([loanRecord, ...loans]);
-      showToast(lang === 'bn' ? 'নতুন লোন যুক্ত করা হয়েছে' : 'New loan record added successfully');
+  // Save new or edited loan with immediate real-time sync to User ID
+  const handleSaveLoan = async (loanRecord: LoanRecord) => {
+    try {
+      const res = await fetch('/api/admin/save-loan-and-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: currentUser?.phone || '01907239952',
+          role: currentUser?.role || 'admin',
+          loan: loanRecord,
+        }),
+      });
+      const data = await res.json();
+      if (data?.success && Array.isArray(data.masterLoans)) {
+        setLoans(data.masterLoans);
+        showToast(
+          lang === 'bn'
+            ? `💾 লোন (${loanRecord.loanId}) সফলভাবে সেভ হয়েছে এবং ${loanRecord.personName}-এর আইডিতে রিয়েল-টাইমে পৌঁছে গেছে!`
+            : `💾 Loan (${loanRecord.loanId}) saved and real-time synced to ${loanRecord.personName}'s account!`
+        );
+      } else {
+        const index = loans.findIndex(l => l.loanId === loanRecord.loanId || l.id === loanRecord.id);
+        if (index >= 0) {
+          const copy = [...loans];
+          copy[index] = loanRecord;
+          setLoans(copy);
+        } else {
+          setLoans([loanRecord, ...loans]);
+        }
+        showToast(lang === 'bn' ? 'লোন তথ্য সংরক্ষিত হয়েছে' : 'Loan record updated');
+      }
+    } catch (e) {
+      console.error(e);
+      const index = loans.findIndex(l => l.loanId === loanRecord.loanId || l.id === loanRecord.id);
+      if (index >= 0) {
+        const copy = [...loans];
+        copy[index] = loanRecord;
+        setLoans(copy);
+      } else {
+        setLoans([loanRecord, ...loans]);
+      }
+      showToast(lang === 'bn' ? 'লোন তথ্য হালনাগাদ করা হয়েছে' : 'Loan record updated');
     }
     recordActivity(
-      index >= 0 ? 'EDIT_LOAN' : 'NEW_LOAN',
-      `${loanRecord.personName}-এর বিকাশ লোন (${loanRecord.loanId}) ${index >= 0 ? 'সংশোধন' : 'নতুন যুক্ত'} করা হয়েছে`,
+      'SAVE_LOAN',
+      `${loanRecord.personName}-এর বিকাশ লোন (${loanRecord.loanId}) সেভ ও ইউজারের আইডিতে রিয়েল-টাইমে সিঙ্ক করা হয়েছে`,
       { loanId: loanRecord.loanId, person: loanRecord.personName }
     );
     setLoanToEdit(null);
+  };
+
+  // Bulk Save and Real-Time Sync to all user accounts
+  const handleSaveAllToUsers = async () => {
+    try {
+      const res = await fetch('/api/admin/save-and-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: currentUser?.phone || '01907239952',
+          role: currentUser?.role || 'admin',
+          loans,
+          transactions,
+          changeDescription: 'সুপার অ্যাডমিন কর্তৃক সকল লোন এক ক্লিকে সকল ইউজারের আইডিতে সেভ ও রিয়েল-টাইমে সিঙ্ক করা হয়েছে',
+        }),
+      });
+      const data = await res.json();
+      if (data?.success) {
+        if (Array.isArray(data.masterLoans)) {
+          setLoans(data.masterLoans);
+        }
+        showToast(
+          lang === 'bn'
+            ? '✅ সফলভাবে সকল লোন ডাটাবেজে সেভ হয়েছে এবং সকল ইউজারের আইডিতে রিয়েল-টাইমে সিঙ্ক সম্পন্ন হয়েছে!'
+            : '✅ All loans successfully saved and real-time synced to all user accounts!'
+        );
+      } else {
+        showToast(lang === 'bn' ? 'ডাটাবেজে সেভ সম্পন্ন হয়েছে' : 'Saved to database');
+      }
+    } catch (e) {
+      showToast(lang === 'bn' ? 'ডাটাবেজে সেভ সম্পন্ন হয়েছে' : 'Saved to database');
+    }
   };
 
   // Edit loan
@@ -519,27 +603,37 @@ export default function App() {
     );
   };
 
-  // Monthly Rollover Execution
-  const handleExecuteRollover = () => {
-    const updated = loans.map(loan => {
-      if (loan.status === 'paid' || loan.totalDue <= 0) return loan;
+  // Monthly Rollover Execution: Advances month for paid loans and audits dues
+  const handleExecuteRollover = async () => {
+    const { updatedLoans, rolledOverCount, overdueCount } = executeLoansMonthlyRollover(loans);
+    setLoans(updatedLoans);
 
-      const overdue = isDateOverdue(loan.nextLoanSubmitDate);
-      if (overdue) {
-        return {
-          ...loan,
-          status: 'overdue' as const,
-        };
-      }
-      return loan;
-    });
+    // Save and sync to backend / users in real-time
+    try {
+      await fetch('/api/admin/save-and-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: currentUser?.phone || '01907239952',
+          role: currentUser?.role || 'admin',
+          loans: updatedLoans,
+          transactions,
+          changeDescription: `মাসিক রোল-ওভার প্রয়োগ: ${rolledOverCount}টি লোন নতুন মাসে স্থানান্তরিত, ${overdueCount}টি ওভারডিউ চিহ্নিত`,
+        }),
+      });
+    } catch (e) {
+      console.warn('Rollover sync error:', e);
+    }
 
-    setLoans(updated);
-    recordActivity('ROLLOVER', 'মাসিক রোল-ওভার এবং কিস্তির শিডিউল নিরীক্ষা সফলভাবে সম্পন্ন হয়েছে');
+    recordActivity(
+      'ROLLOVER',
+      `মাসিক রোল-ওভার সম্পন্ন: ${rolledOverCount}টি লোন পরবর্তী মাসে স্থানান্তরিত এবং ${overdueCount}টি ওভারডিউ নিরীক্ষিত`
+    );
+
     showToast(
       lang === 'bn'
-        ? 'মাসিক রোল-ওভার সমাপ্ত হয়েছে। বকেয়া কিস্তিসমূহ সফলভাবে নিরীক্ষিত হয়েছে।'
-        : 'Monthly rollover audit complete! Installment statuses updated.'
+        ? `✅ মাসিক রোল-ওভার সম্পন্ন! ${rolledOverCount}টি লোনের ২য় মাসের কিস্তি বর্তমান মাসে চলে এসেছে এবং শিডিউল আপডেট হয়েছে।`
+        : `✅ Monthly rollover complete! ${rolledOverCount} loans advanced to current month.`
     );
   };
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LoanRecord, PaymentTransaction, Language } from '../types/loan';
 import { getT } from '../utils/translations';
-import { bumpDateByOneMonth, formatCurrency, getCurrentDateDDMMYYYY } from '../utils/dateUtils';
+import { bumpDateByOneMonth, formatCurrency, getCurrentDateDDMMYYYY, getThreeMonthNames } from '../utils/dateUtils';
 import { X, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
 
 interface PaymentModalProps {
@@ -177,24 +177,70 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   placeholder="0.00"
                 />
               </div>
-              {currentLoan && (
-                <div className="flex gap-2 mt-1">
-                  <button
-                    type="button"
-                    onClick={() => setAmount(currentLoan.currentMonthEmi.toString())}
-                    className="text-[10px] text-[#E2136E] hover:underline"
-                  >
-                    Current EMI (৳{currentLoan.currentMonthEmi.toFixed(2)})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAmount(currentLoan.totalDue.toString())}
-                    className="text-[10px] text-slate-600 hover:underline"
-                  >
-                    Full (৳{currentLoan.totalDue.toFixed(2)})
-                  </button>
-                </div>
-              )}
+              {currentLoan && (() => {
+                const loanMonths = getThreeMonthNames(currentLoan.nextLoanSubmitDate, lang);
+                return (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {currentLoan.currentMonthEmi > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAmount(currentLoan.currentMonthEmi.toString());
+                          setNote(`${currentLoan.personName} - ${loanMonths.month1} কিস্তি জমা`);
+                        }}
+                        className="px-2 py-0.5 text-[10px] font-bold text-[#E2136E] bg-pink-50 border border-pink-200 rounded-md hover:bg-pink-100 transition-colors cursor-pointer"
+                        title={lang === 'bn' ? `${loanMonths.month1}-এর কিস্তি নির্বাচন করুন` : `Select ${loanMonths.month1} EMI`}
+                      >
+                        {loanMonths.month1Short} (৳{currentLoan.currentMonthEmi.toFixed(2)})
+                      </button>
+                    ) : (
+                      <span className="px-2 py-0.5 text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md">
+                        ✓ {loanMonths.month1Short} পরিশোধিত
+                      </span>
+                    )}
+
+                    {currentLoan.secondMonthEmi > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAmount(currentLoan.secondMonthEmi.toString());
+                          setNote(`${currentLoan.personName} - ${loanMonths.month2} কিস্তি জমা`);
+                        }}
+                        className="px-2 py-0.5 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors cursor-pointer"
+                        title={lang === 'bn' ? `${loanMonths.month2}-এর কিস্তি নির্বাচন করুন` : `Select ${loanMonths.month2} EMI`}
+                      >
+                        {loanMonths.month2Short} (৳{currentLoan.secondMonthEmi.toFixed(2)})
+                      </button>
+                    )}
+
+                    {currentLoan.thirdMonthEmi > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAmount(currentLoan.thirdMonthEmi.toString());
+                          setNote(`${currentLoan.personName} - ${loanMonths.month3} কিস্তি জমা`);
+                        }}
+                        className="px-2 py-0.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md hover:bg-emerald-100 transition-colors cursor-pointer"
+                        title={lang === 'bn' ? `${loanMonths.month3}-এর কিস্তি নির্বাচন করুন` : `Select ${loanMonths.month3} EMI`}
+                      >
+                        {loanMonths.month3Short} (৳{currentLoan.thirdMonthEmi.toFixed(2)})
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAmount(currentLoan.totalDue.toString());
+                        setNote(`${currentLoan.personName} - সকল কিস্তি পূর্ণ পরিশোধ`);
+                      }}
+                      className="px-2 py-0.5 text-[10px] font-bold text-slate-700 bg-slate-100 border border-slate-300 rounded-md hover:bg-slate-200 transition-colors cursor-pointer"
+                      title={lang === 'bn' ? 'সম্পূর্ণ বকেয়া পরিশোধ' : 'Full loan settlement'}
+                    >
+                      {lang === 'bn' ? 'পূর্ণ পরিশোধ' : 'Full'} (৳{currentLoan.totalDue.toFixed(2)})
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
 
             <div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LoanRecord, Language } from '../types/loan';
 import { getT } from '../utils/translations';
-import { getCurrentDateDDMMYYYY, bumpDateByOneMonth } from '../utils/dateUtils';
+import { getCurrentDateDDMMYYYY, bumpDateByOneMonth, getThreeMonthNames } from '../utils/dateUtils';
 import { parseScreenshotText, ParsedScreenshotData } from '../utils/screenshotParser';
 import {
   X,
@@ -535,49 +535,54 @@ export const NewLoanModal: React.FC<NewLoanModalProps> = ({
               </div>
 
               {/* 3 EMI Inputs - Super Admin can edit all 3 */}
-              <div className="grid grid-cols-3 gap-2">
-                <div className="bg-white dark:bg-slate-800 p-2 rounded-xl border border-pink-100 dark:border-slate-700">
-                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                    {lang === 'bn' ? '১ম মাস কিস্তি (৳)' : '1st Month EMI (৳)'}
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={currentMonthEmi}
-                    onChange={(e) => handleEmi1Change(e.target.value)}
-                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono-numbers text-xs font-bold text-slate-900 dark:text-white"
-                  />
-                </div>
+              {(() => {
+                const months = getThreeMonthNames(nextDate, lang);
+                return (
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-white dark:bg-slate-800 p-2 rounded-xl border border-pink-100 dark:border-slate-700">
+                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                        {lang === 'bn' ? `১ম মাস (${months.month1Short})` : `1st Mo (${months.month1Short})`}
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        required
+                        value={currentMonthEmi}
+                        onChange={(e) => handleEmi1Change(e.target.value)}
+                        className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono-numbers text-xs font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
 
-                <div className="bg-white dark:bg-slate-800 p-2 rounded-xl border border-pink-100 dark:border-slate-700">
-                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                    {lang === 'bn' ? '২য় মাস কিস্তি (৳)' : '2nd Month EMI (৳)'}
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={secondMonthEmi}
-                    onChange={(e) => handleEmi2Change(e.target.value)}
-                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono-numbers text-xs font-bold text-slate-900 dark:text-white"
-                  />
-                </div>
+                    <div className="bg-white dark:bg-slate-800 p-2 rounded-xl border border-pink-100 dark:border-slate-700">
+                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                        {lang === 'bn' ? `২য় মাস (${months.month2Short})` : `2nd Mo (${months.month2Short})`}
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        required
+                        value={secondMonthEmi}
+                        onChange={(e) => handleEmi2Change(e.target.value)}
+                        className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono-numbers text-xs font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
 
-                <div className="bg-white dark:bg-slate-800 p-2 rounded-xl border border-pink-100 dark:border-slate-700">
-                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                    {lang === 'bn' ? '৩য় মাস কিস্তি (৳)' : '3rd Month EMI (৳)'}
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={thirdMonthEmi}
-                    onChange={(e) => handleEmi3Change(e.target.value)}
-                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono-numbers text-xs font-bold text-slate-900 dark:text-white"
-                  />
-                </div>
-              </div>
+                    <div className="bg-white dark:bg-slate-800 p-2 rounded-xl border border-pink-100 dark:border-slate-700">
+                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                        {lang === 'bn' ? `৩য় মাস (${months.month3Short})` : `3rd Mo (${months.month3Short})`}
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        required
+                        value={thirdMonthEmi}
+                        onChange={(e) => handleEmi3Change(e.target.value)}
+                        className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono-numbers text-xs font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Total Due display */}
               <div className="flex items-center justify-between pt-1 text-xs">

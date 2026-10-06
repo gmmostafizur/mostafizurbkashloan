@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LoanRecord, Language } from '../types/loan';
 import { getT } from '../utils/translations';
-import { formatCurrency, isDateOverdue, getDaysRemaining } from '../utils/dateUtils';
+import { formatCurrency, isDateOverdue, getDaysRemaining, getThreeMonthNames } from '../utils/dateUtils';
 import { RepaymentProgressBar } from './RepaymentProgressBar';
 import {
   Calendar,
@@ -56,6 +56,9 @@ export const BorrowerBreakdown: React.FC<BorrowerBreakdownProps> = ({
     return getDaysRemaining(a.nextLoanSubmitDate) - getDaysRemaining(b.nextLoanSubmitDate);
   });
   const earliestDate = sortedByDate.length > 0 ? sortedByDate[0].nextLoanSubmitDate : 'N/A';
+
+  // 3-month schedule for this borrower's loan table headers
+  const globalMonths = getThreeMonthNames(earliestDate !== 'N/A' ? earliestDate : null, lang);
 
   // Payment Reminder Modal State
   const [isReminderOpen, setIsReminderOpen] = useState(false);
@@ -289,9 +292,24 @@ Mostafizur bKash Loan Management`;
               <tr>
                 <th className="py-2.5 px-3">{t.colLoanId}</th>
                 <th className="py-2.5 px-3 text-right">{t.colPrincipal}</th>
-                <th className="py-2.5 px-3 text-right">{t.colCurrentEmi}</th>
-                <th className="py-2.5 px-3 text-right">{t.colSecondEmi}</th>
-                <th className="py-2.5 px-3 text-right">{t.colThirdEmi}</th>
+                <th className="py-2.5 px-3 text-right">
+                  <div>{t.colCurrentEmi}</div>
+                  <div className="text-[10px] font-bold text-pink-600 dark:text-pink-400">
+                    ({globalMonths.month1})
+                  </div>
+                </th>
+                <th className="py-2.5 px-3 text-right">
+                  <div>{t.colSecondEmi}</div>
+                  <div className="text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                    ({globalMonths.month2})
+                  </div>
+                </th>
+                <th className="py-2.5 px-3 text-right">
+                  <div>{t.colThirdEmi}</div>
+                  <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                    ({globalMonths.month3})
+                  </div>
+                </th>
                 <th className="py-2.5 px-3 text-right">{t.colTotalDue}</th>
                 <th className="py-2.5 px-3">{t.colPaidProgress}</th>
                 <th className="py-2.5 px-3">{t.colNextDate}</th>
@@ -301,9 +319,11 @@ Mostafizur bKash Loan Management`;
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {borrowerLoans.map((loan) => {
-                const isOverdue = isDateOverdue(loan.nextLoanSubmitDate);
-                const daysRemaining = getDaysRemaining(loan.nextLoanSubmitDate);
                 const isSettled = loan.totalDue <= 0 || loan.status === 'paid';
+                const isCurrentPaid = loan.currentMonthEmi <= 0 && !isSettled;
+                const isOverdue = !isCurrentPaid && isDateOverdue(loan.nextLoanSubmitDate);
+                const daysRemaining = getDaysRemaining(loan.nextLoanSubmitDate);
+                const loanMonths = getThreeMonthNames(loan.nextLoanSubmitDate, lang);
 
                 return (
                   <tr key={loan.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
@@ -314,13 +334,46 @@ Mostafizur bKash Loan Management`;
                       {formatCurrency(loan.totalPrincipalLoan, lang)}
                     </td>
                     <td className="py-3 px-3 text-right font-mono-numbers text-slate-900 dark:text-white font-bold">
-                      {formatCurrency(loan.currentMonthEmi, lang)}
+                      {loan.currentMonthEmi > 0 ? (
+                        <div>
+                          <div>{formatCurrency(loan.currentMonthEmi, lang)}</div>
+                          <div className="text-[10px] font-semibold text-pink-600 dark:text-pink-400">
+                            ({loanMonths.month1Short})
+                          </div>
+                        </div>
+                      ) : loan.totalDue > 0 ? (
+                        <div className="flex flex-col items-end">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.5 rounded-md">
+                            <CheckCircle className="w-2.5 h-2.5 text-emerald-600" />
+                            <span>{lang === 'bn' ? 'পরিশোধিত (৳০)' : 'Paid (৳0)'}</span>
+                          </span>
+                          <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">
+                            {loanMonths.month1Short} {lang === 'bn' ? 'জমা সম্পন্ন' : 'cleared'}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-emerald-600 font-medium">{formatCurrency(0, lang)}</span>
+                      )}
                     </td>
                     <td className="py-3 px-3 text-right font-mono-numbers text-slate-600 dark:text-slate-400">
-                      {loan.secondMonthEmi > 0 ? formatCurrency(loan.secondMonthEmi, lang) : '-'}
+                      {loan.secondMonthEmi > 0 ? (
+                        <div>
+                          <div className="font-bold text-blue-700 dark:text-blue-300">{formatCurrency(loan.secondMonthEmi, lang)}</div>
+                          <div className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">
+                            ({loanMonths.month2Short})
+                          </div>
+                        </div>
+                      ) : '-'}
                     </td>
                     <td className="py-3 px-3 text-right font-mono-numbers text-slate-600 dark:text-slate-400">
-                      {loan.thirdMonthEmi > 0 ? formatCurrency(loan.thirdMonthEmi, lang) : '-'}
+                      {loan.thirdMonthEmi > 0 ? (
+                        <div>
+                          <div className="font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(loan.thirdMonthEmi, lang)}</div>
+                          <div className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                            ({loanMonths.month3Short})
+                          </div>
+                        </div>
+                      ) : '-'}
                     </td>
                     <td className="py-3 px-3 text-right font-mono-numbers text-[#E2136E] font-bold">
                       {formatCurrency(loan.totalDue, lang)}
@@ -329,16 +382,24 @@ Mostafizur bKash Loan Management`;
                       <RepaymentProgressBar loan={loan} lang={lang} />
                     </td>
                     <td className="py-3 px-3 font-mono-numbers">
-                      <span className={isOverdue ? 'text-rose-600 font-bold' : 'text-slate-800 dark:text-slate-200'}>
+                      <div className={isOverdue && !isSettled ? 'text-rose-600 font-bold' : 'text-slate-800 dark:text-slate-200'}>
                         {loan.nextLoanSubmitDate}
-                      </span>
+                      </div>
                       {!isSettled && (
                         <div className="text-[10px] text-slate-400">
-                          {isOverdue
-                            ? `${Math.abs(daysRemaining)}d overdue`
-                            : daysRemaining === 0
-                            ? 'Due today'
-                            : `in ${daysRemaining} days`}
+                          {isCurrentPaid ? (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                              {lang === 'bn' ? `পরবর্তী কিস্তি: ${loanMonths.month2Short}` : `Next EMI: ${loanMonths.month2Short}`}
+                            </span>
+                          ) : isOverdue ? (
+                            <span className="text-rose-600 font-medium">
+                              {Math.abs(daysRemaining)}d overdue
+                            </span>
+                          ) : daysRemaining === 0 ? (
+                            <span className="text-amber-600 font-medium">Due today</span>
+                          ) : (
+                            <span>in {daysRemaining} days</span>
+                          )}
                         </div>
                       )}
                     </td>
@@ -347,6 +408,11 @@ Mostafizur bKash Loan Management`;
                         <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
                           <CheckCircle className="w-3.5 h-3.5" />
                           {t.statusPaid}
+                        </span>
+                      ) : isCurrentPaid ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>{lang === 'bn' ? `${loanMonths.month1Short} পরিশোধিত ✓` : `${loanMonths.month1Short} Paid ✓`}</span>
                         </span>
                       ) : isOverdue ? (
                         <span className="text-rose-600 dark:text-rose-400 font-semibold flex items-center gap-1">

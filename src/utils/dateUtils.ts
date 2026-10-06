@@ -197,3 +197,137 @@ export function getCurrentDateMMDDYYYY(): string {
 }
 
 export const getCurrentDateDDMMYYYY = getCurrentDateMMDDYYYY;
+
+export const BANGLA_MONTHS = [
+  'জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন',
+  'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'
+];
+
+export const ENGLISH_MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+export interface ThreeMonthNames {
+  month1: string; // e.g. "অক্টোবর ২০২৬" or "October 2026"
+  month2: string; // e.g. "নভেম্বর ২০২৬" or "November 2026"
+  month3: string; // e.g. "ডিসেম্বর ২০২৬" or "December 2026"
+  month1Short: string; // e.g. "অক্টোবর" or "October"
+  month2Short: string; // e.g. "নভেম্বর" or "November"
+  month3Short: string; // e.g. "ডিসেম্বর" or "December"
+  month1Label: string; // e.g. "বর্তমান মাসের কিস্তি (অক্টোবর ২০২৬)"
+  month2Label: string; // e.g. "২য় মাসের কিস্তি (নভেম্বর ২০২৬)"
+  month3Label: string; // e.g. "৩য় মাসের কিস্তি (ডিসেম্বর ২০২৬)"
+}
+
+export function getThreeMonthNames(referenceDateOrStr?: Date | string | null, lang: 'en' | 'bn' = 'bn'): ThreeMonthNames {
+  let refDate = new Date();
+  if (typeof referenceDateOrStr === 'string' && referenceDateOrStr.trim()) {
+    const parsed = parseMMDDYYYY(referenceDateOrStr);
+    if (parsed) refDate = parsed;
+  } else if (referenceDateOrStr instanceof Date) {
+    refDate = referenceDateOrStr;
+  }
+
+  const m1 = refDate.getMonth();
+  const y1 = refDate.getFullYear();
+
+  const d2 = new Date(y1, m1 + 1, 1);
+  const m2 = d2.getMonth();
+  const y2 = d2.getFullYear();
+
+  const d3 = new Date(y1, m1 + 2, 1);
+  const m3 = d3.getMonth();
+  const y3 = d3.getFullYear();
+
+  if (lang === 'bn') {
+    const month1 = `${BANGLA_MONTHS[m1]} ${toBanglaNumber(y1)}`;
+    const month2 = `${BANGLA_MONTHS[m2]} ${toBanglaNumber(y2)}`;
+    const month3 = `${BANGLA_MONTHS[m3]} ${toBanglaNumber(y3)}`;
+    return {
+      month1,
+      month2,
+      month3,
+      month1Short: BANGLA_MONTHS[m1],
+      month2Short: BANGLA_MONTHS[m2],
+      month3Short: BANGLA_MONTHS[m3],
+      month1Label: `বর্তমান মাসের কিস্তি (${month1})`,
+      month2Label: `২য় মাসের কিস্তি (${month2})`,
+      month3Label: `৩য় মাসের কিস্তি (${month3})`,
+    };
+  } else {
+    const month1 = `${ENGLISH_MONTHS[m1]} ${y1}`;
+    const month2 = `${ENGLISH_MONTHS[m2]} ${y2}`;
+    const month3 = `${ENGLISH_MONTHS[m3]} ${y3}`;
+    return {
+      month1,
+      month2,
+      month3,
+      month1Short: ENGLISH_MONTHS[m1],
+      month2Short: ENGLISH_MONTHS[m2],
+      month3Short: ENGLISH_MONTHS[m3],
+      month1Label: `Current Month EMI (${month1})`,
+      month2Label: `2nd Month EMI (${month2})`,
+      month3Label: `3rd Month EMI (${month3})`,
+    };
+  }
+}
+
+// Get the specific installment month name for payment tracking
+export function getPaymentMonthName(loanNextDate?: string, installmentType: 'current' | 'second' | 'third' | 'settlement' = 'current', lang: 'en' | 'bn' = 'bn'): string {
+  const schedule = getThreeMonthNames(loanNextDate, lang);
+  if (installmentType === 'settlement') {
+    return lang === 'bn'
+      ? `পূর্ণ পরিশোধ (${schedule.month1Short}, ${schedule.month2Short}, ${schedule.month3Short})`
+      : `Full Settlement (${schedule.month1Short}, ${schedule.month2Short}, ${schedule.month3Short})`;
+  }
+  if (installmentType === 'second') return schedule.month2;
+  if (installmentType === 'third') return schedule.month3;
+  return schedule.month1;
+}
+
+// Check if a loan's current month installment is already paid
+export function isCurrentMonthPaid(currentMonthEmi: number, totalDue: number): boolean {
+  return currentMonthEmi <= 0 && totalDue > 0;
+}
+
+// Execute monthly rollover: when calendar month changes or on explicit rollover,
+// for loans where current month was paid, the 2nd month EMI moves to current month,
+// 3rd month moves to 2nd month, and next submit date moves forward by 1 month.
+export function executeLoansMonthlyRollover(loans: any[]): { updatedLoans: any[]; rolledOverCount: number; overdueCount: number } {
+  let rolledOverCount = 0;
+  let overdueCount = 0;
+
+  const updatedLoans = loans.map((loan) => {
+    if (loan.status === 'paid' || loan.totalDue <= 0) {
+      return loan;
+    }
+
+    // If current month EMI was paid (0), month change shifts 2nd month to current month!
+    if (loan.currentMonthEmi <= 0 && loan.totalDue > 0) {
+      rolledOverCount++;
+      const nextDate = bumpDateByOneMonth(loan.nextLoanSubmitDate);
+      return {
+        ...loan,
+        nextLoanSubmitDate: nextDate,
+        currentMonthEmi: loan.secondMonthEmi || 0,
+        secondMonthEmi: loan.thirdMonthEmi || 0,
+        thirdMonthEmi: 0,
+        status: 'active' as const,
+      };
+    }
+
+    // If current month was NOT paid and date is overdue
+    if (isDateOverdue(loan.nextLoanSubmitDate)) {
+      overdueCount++;
+      return {
+        ...loan,
+        status: 'overdue' as const,
+      };
+    }
+
+    return loan;
+  });
+
+  return { updatedLoans, rolledOverCount, overdueCount };
+}
